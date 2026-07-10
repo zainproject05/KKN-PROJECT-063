@@ -1,0 +1,8 @@
+{
+  "name": "KKN PROJECT FIXED",
+  "description": "Premium Command Center & Portal Operasional KKN Kelompok 063. Memfasilitasi manajemen presensi cepat, pembukuan kas harian, logbook kegiatan kelompok, repositori dokumen digital, dan koordinasi agenda harian.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,15 @@
+export type ActiveTab =
+  | "home"
+  | "login"
+  | "about"
+  | "gallery"
+  | "team-quotes"
+  | "dashboard"
+  | "attendance"
+  | "programs"
+  | "finance"
+  | "reports"
+  | "template-divisi"
+  | "members"
+  | "picket"
+  | "settings";
