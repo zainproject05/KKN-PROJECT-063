@@ -198,6 +198,7 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
+    // We do NOT flip the canvas, so the saved photo has normal orientation (text is readable).
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
     setPhotoDataUrl(dataUrl);
@@ -644,42 +645,43 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
             <div className="flex-1 flex flex-col">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-3">1. Camera Preview</label>
               
-              <div className="bg-black/80 border border-white/10 rounded-[22px] overflow-hidden relative aspect-[4/3] md:h-[360px] w-full flex flex-col items-center justify-center mb-6 shadow-inner ring-1 ring-white/5">
+              <div className="bg-[#050505] border border-white/10 overflow-hidden relative aspect-[3/4] md:aspect-[4/3] w-full flex flex-col items-center justify-center mb-6 shadow-[inset_0_0_40px_rgba(0,0,0,0.8)]">
                 {!cameraActive && !photoDataUrl ? (
                   <button 
                     onClick={startCamera}
-                    className="flex flex-col items-center gap-4 text-slate-400 hover:text-cyan-400 transition-colors p-8 group cursor-pointer h-full w-full justify-center"
+                    className="flex flex-col items-center gap-4 text-slate-400 hover:text-white transition-colors p-8 group cursor-pointer h-full w-full justify-center"
                   >
-                    <div className="w-16 h-16 rounded-full bg-white/5 group-hover:bg-cyan-500/10 flex items-center justify-center transition-colors">
+                    <div className="w-20 h-20 bg-white/5 border border-white/10 group-hover:border-cyan-500/50 group-hover:bg-cyan-500/10 flex items-center justify-center transition-all">
                       <Camera className="w-8 h-8" />
                     </div>
                     <div className="text-center">
-                      <span className="text-sm font-bold uppercase tracking-wider block">Aktifkan Kamera</span>
-                      <span className="text-[10px] text-slate-500 mt-1 block">Ambil selfie sebagai bukti kehadiran</span>
+                      <span className="text-xs font-black uppercase tracking-widest block text-cyan-400 mb-1">Inisialisasi Kamera</span>
+                      <span className="text-[10px] text-slate-500 font-mono">Pastikan pencahayaan cukup</span>
                     </div>
                   </button>
                 ) : null}
                 
                 <video 
                   ref={videoRef} 
-                  className={`w-full h-full object-cover ${cameraActive && !photoDataUrl ? 'block' : 'hidden'}`}
+                  className={`w-full h-full object-cover transform scale-x-[-1] ${cameraActive && !photoDataUrl ? 'block' : 'hidden'}`}
                   playsInline
                   muted
                 />
                 
                 {photoDataUrl && (
-                  <img src={photoDataUrl} alt="Selfie" className="w-full h-full object-cover" />
+                  <img src={photoDataUrl} alt="Selfie" className="w-full h-full object-cover transform scale-x-[-1]" />
                 )}
                 
                 <canvas ref={canvasRef} className="hidden" />
                 
-                {/* Overlay Guide */}
+                {/* Premium Firm Overlay Guide */}
                 {cameraActive && !photoDataUrl && (
-                  <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center border-[8px] border-black/20">
-                    <div className="w-[60%] h-[70%] border-2 border-white/30 rounded-[30%] border-dashed opacity-50 relative">
-                       <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 bg-black/60 px-3 py-1 rounded-full backdrop-blur-md">
-                         <span className="text-[10px] font-bold text-white whitespace-nowrap">Pastikan wajah terlihat jelas</span>
-                       </div>
+                  <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+                    <div className="relative w-[70%] max-w-[280px] aspect-[3/4]">
+                      <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-cyan-400/80"></div>
+                      <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-cyan-400/80"></div>
+                      <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-cyan-400/80"></div>
+                      <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-cyan-400/80"></div>
                     </div>
                   </div>
                 )}
@@ -688,9 +690,9 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
                   <div className="absolute bottom-6 left-0 right-0 flex justify-center z-10">
                     <button 
                       onClick={takePhoto}
-                      className="w-16 h-16 rounded-full border-[4px] border-white/30 flex items-center justify-center bg-black/20 active:scale-95 transition-all hover:border-cyan-400/80 cursor-pointer backdrop-blur-sm"
+                      className="w-16 h-16 rounded-full border-[3px] border-white/40 flex items-center justify-center bg-transparent active:scale-95 transition-all hover:border-cyan-400 cursor-pointer"
                     >
-                      <div className="w-12 h-12 rounded-full bg-white shadow-[0_0_15px_rgba(255,255,255,0.8)]" />
+                      <div className="w-12 h-12 rounded-full bg-white shadow-[0_0_20px_rgba(255,255,255,0.8)]" />
                     </button>
                   </div>
                 )}
