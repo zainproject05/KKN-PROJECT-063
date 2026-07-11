@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ActiveTab } from "./types";
 
@@ -23,6 +23,7 @@ import Settings from "./components/kkn/Settings";
 import TemplateDivisi from "./components/kkn/TemplateDivisi";
 import WorkspaceLayout from "./components/kkn/WorkspaceLayout";
 import AttendanceCheckIn from "./components/kkn/AttendanceCheckIn";
+
 import PublicAbsensi from "./components/PublicAbsensi";
 
 // Import luxury UI assets
@@ -270,13 +271,19 @@ export default function App() {
   if (isPublicAbsensi) {
     return (
       <div className="relative min-h-screen bg-[#020408] overflow-hidden flex items-center justify-center">
-        {theme === "navy" && <InteractiveBlueprintBackground />}
-        <PublicAbsensi 
-          onBackToHome={() => {
-            setIsPublicAbsensi(false);
-            window.history.pushState({}, "", "/");
-          }} 
-        />
+        {theme === "navy" && (
+          <ErrorBoundary>
+            <InteractiveBlueprintBackground />
+          </ErrorBoundary>
+        )}
+        <ErrorBoundary>
+          <PublicAbsensi 
+            onBackToHome={() => {
+              setIsPublicAbsensi(false);
+              window.history.pushState({}, "", "/");
+            }} 
+          />
+        </ErrorBoundary>
       </div>
     );
   }
@@ -334,19 +341,25 @@ export default function App() {
         id="kkn_project_workspace"
       >
         {/* Interactive premium ambient background glow wrapper */}
-        {theme === "navy" && <InteractiveBlueprintBackground />}
+        {theme === "navy" && (
+          <ErrorBoundary>
+            <InteractiveBlueprintBackground />
+          </ErrorBoundary>
+        )}
 
         {/* MODULAR RADI-X PREMIUM NAVIGATION HEADER DOCK */}
-        <Navigation 
-          activeTab={activeTab} 
-          setActiveTab={handleNavigateToTab} 
-          activeSection={activeSection}
-          datasetLoaded={false} 
-          modelTrained={false} 
-          isLoggedIn={isLoggedIn}
-          currentUser={currentUser}
-          onLogout={handleLogout}
-        />
+        <ErrorBoundary>
+          <Navigation 
+            activeTab={activeTab} 
+            setActiveTab={handleNavigateToTab} 
+            activeSection={activeSection}
+            datasetLoaded={false} 
+            modelTrained={false} 
+            isLoggedIn={isLoggedIn}
+            currentUser={currentUser}
+            onLogout={handleLogout}
+          />
+        </ErrorBoundary>
 
         {/* MASTER SCREEN MAIN CONTENT VIEWPORT */}
         <main className="relative z-10 flex-grow w-full max-w-[97%] mx-auto px-2 sm:px-6 lg:px-8 mt-6 shrink-0 transition-all duration-300" id="app_main_viewport_shell">
@@ -376,7 +389,9 @@ export default function App() {
         </main>
 
         <div className="mt-16 print-hidden" id="cinematic_footer_workspace">
-          <CinematicFooter />
+          <ErrorBoundary>
+            <CinematicFooter />
+          </ErrorBoundary>
         </div>
       </motion.div>
 

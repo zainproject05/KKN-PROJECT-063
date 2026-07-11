@@ -121,11 +121,11 @@ export default function AttendanceCheckIn({ sessionToken, onBackToHome }: Attend
             <div className="nm-inset p-4 space-y-3 font-mono text-[10px] text-slate-300">
               <div className="flex items-center gap-2.5">
                 <Users size={14} className="text-cyan-400 shrink-0" />
-                <span>Seluruh anggota aktif otomatis ditandai hadir saat sesi dibuka.</span>
+                <span>Setiap anggota wajib melakukan presensi mandiri di portal publik.</span>
               </div>
               <div className="flex items-center gap-2.5 pt-2 border-t border-white/[0.03]">
                 <Clock size={14} className="text-cyan-400 shrink-0" />
-                <span>Perubahan status (Izin, Sakit, Alfa) akan dicatat langsung oleh Koordinator.</span>
+                <span>Perubahan status (Hadir, Izin, Sakit, Alfa) dicatat langsung oleh Koordinator.</span>
               </div>
             </div>
 

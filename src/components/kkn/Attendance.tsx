@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Calendar, Check, X, CheckCircle, Clock, Plus, Trash2, 
+  CheckCircle2, XCircle, Calendar, Check, X, CheckCircle, Clock, Plus, Trash2, 
   UserCheck, AlertCircle, RefreshCw, ClipboardList, Info,
-  MapPin, Eye, FileText, Users, Printer, Folder, ChevronDown, ChevronUp, Lock, Camera
+  MapPin, Eye, FileText, Users, Printer, Folder, ChevronDown, ChevronUp, Lock, Unlock, Camera, Copy
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
 import { audio } from "../../utils/audioService";
+import { SessionCountdown } from "./SessionCountdown";
 import { 
   parseSession, 
   serializeSession, 
@@ -37,9 +38,11 @@ const REV_STATUS_MAP: Record<string, string> = {
 export default function Attendance() {
   const [members, setMembers] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
-  const [programs, setPrograms] = useState<any[]>([]);
+  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<any | null>(null);
+  const [programs, setPrograms] = useState<any[]>([]);
   const [records, setRecords] = useState<any[]>([]);
+  const [allRecords, setAllRecords] = useState<any[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -153,11 +156,9 @@ export default function Attendance() {
 
   // Subscribe to real-time events on Supabase silently
   useRealtimeRefresh(() => {
-    if (selectedSession) {
-      fetchSessionRecords(selectedSession.id);
-      setShowSyncIndicator(true);
-      setTimeout(() => setShowSyncIndicator(false), 3000);
-    }
+    fetchData();
+    setShowSyncIndicator(true);
+    setTimeout(() => setShowSyncIndicator(false), 3000);
   });
 
   const getMemberPhotoUrl = (member: any) => {
@@ -210,7 +211,13 @@ export default function Attendance() {
         .order("title", { ascending: true });
       setPrograms(dbPrograms || []);
 
-      // 3. Fetch Sessions
+      // 3. Fetch All Records
+      const { data: dbRecords } = await supabase
+        .from("attendance_records")
+        .select("*");
+      setAllRecords((dbRecords || []).map(parseRecord));
+
+      // 4. Fetch Sessions
       const { data: dbSessions } = await supabase
         .from("attendance_sessions")
         .select(`
@@ -279,6 +286,7 @@ export default function Attendance() {
             .from("attendance_sessions")
             .update({ 
               activity_name: serializedName, 
+              status: "closed",
               updated_at: new Date().toISOString(),
               closed_at: new Date().toISOString()
             })
@@ -291,28 +299,21 @@ export default function Attendance() {
         setAutoClosedMessage(true);
         setTimeout(() => setAutoClosedMessage(false), 6000);
 
-        fetchData();
+        setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: "closed" } : s));
       } catch (err) {
         console.error("Gagal melakukan penutupan sesi otomatis:", err);
       }
     }
   };
 
-  useEffect(() => {
-    if (selectedSession) {
-      checkAutoClose(selectedSession);
-    }
-  }, [selectedSession]);
 
   // Periodic silent auto-close checker
   useEffect(() => {
     const interval = setInterval(() => {
-      if (selectedSession) {
-        checkAutoClose(selectedSession);
-      }
+      sessions.forEach(session => checkAutoClose(session));
     }, 30000);
     return () => clearInterval(interval);
-  }, [selectedSession]);
+  }, [sessions]);
 
   // Handle Session Creation
   const handleCreateSession = async (e: React.FormEvent) => {
@@ -353,7 +354,7 @@ export default function Attendance() {
       date: sessionDate,
       opens_at: startTime,
       closes_at: endTime,
-      status: "scheduled",
+      status: "open",
       location_name: locationName.trim() || "Posko KKN Kelompok 063",
       latitude: -7.821008,
       longitude: 110.370001,
@@ -381,7 +382,7 @@ export default function Attendance() {
       description: description.trim() || null,
       created_by_member_id: activeSubmittedBy,
       updated_by_member_id: activeSubmittedBy,
-      status: "scheduled",
+      status: "open",
       activity_type: "Program Kerja",
       is_public: isPublic,
       require_gps: requireGps,
@@ -394,38 +395,8 @@ export default function Attendance() {
       const { data, error: insErr } = await supabase.from("attendance_sessions").insert([payload]).select();
       if (insErr) throw insErr;
 
-      const createdSession = data?.[0];
-      if (createdSession) {
-        // Automatically create default 'Present' records for ALL active members instantly
-        const recordInserts = members.map((m: any) => {
-          const recordData = {
-            session_id: createdSession.id,
-            member_id: m.id,
-            status: "Present",
-            manual_override: false,
-            manual_override_reason: "",
-            check_in_at: new Date().toISOString(),
-            notes: "Hadir Otomatis via Sesi Baru"
-          };
-          const serializedNotes = serializeRecord(recordData, "Hadir Otomatis via Sesi Baru");
-          return {
-            attendance_session_id: createdSession.id,
-            member_id: m.id,
-            attendance_status: "Present",
-            notes: serializedNotes,
-            created_by_member_id: activeSubmittedBy,
-            updated_by_member_id: activeSubmittedBy
-          };
-        });
-
-        if (recordInserts.length > 0) {
-          const { error: recErr } = await supabase.from("attendance_records").insert(recordInserts);
-          if (recErr) console.error("Gagal membuat default rekap:", recErr);
-        }
-      }
-
       await supabase.from("activity_logs").insert([{
-        message: `Membuat sesi presensi baru: ${activityName} dan otomatis mempresensi seluruh anggota.`,
+        message: `Membuat sesi presensi baru: ${activityName}.`,
         created_by_member_id: activeSubmittedBy
       }]);
 
@@ -435,7 +406,7 @@ export default function Attendance() {
       setDescription("");
       setRelatedProgramId("");
       setShowCreateModal(false);
-      showToast("Sesi presensi berhasil dibuat. Semua anggota ditandai hadir.", "success");
+      showToast("Sesi presensi berhasil dibuat.", "success");
       audio.playSuccess();
       
       // Reload all data
@@ -448,8 +419,8 @@ export default function Attendance() {
   };
 
   // Close Session Now
-  const handleCloseSessionNow = async () => {
-    if (!selectedSession) return;
+  const handleCloseSessionNow = async (session: any) => {
+
     triggerConfirm(
       "Tutup Sesi Presensi",
       "Apakah Anda yakin ingin menutup sesi presensi ini? Sesi yang ditutup tidak dapat diedit lagi.",
@@ -461,7 +432,7 @@ export default function Attendance() {
           const { data: dbSess } = await supabase
             .from("attendance_sessions")
             .select("*")
-            .eq("id", selectedSession.id)
+            .eq("id", session.id)
             .limit(1);
 
           if (dbSess && dbSess[0]) {
@@ -473,16 +444,17 @@ export default function Attendance() {
               .from("attendance_sessions")
               .update({ 
                 activity_name: serializedName, 
+                status: "closed",
                 updated_at: new Date().toISOString(),
                 closed_at: new Date().toISOString()
               })
-              .eq("id", selectedSession.id);
+              .eq("id", session.id);
 
             if (updErr) throw updErr;
           }
 
           await supabase.from("activity_logs").insert([{
-            message: `Menutup sesi presensi secara manual: ${selectedSession.activity_name}`
+            message: `Menutup sesi presensi secara manual: ${session.activity_name}`
           }]);
 
           showToast("Sesi presensi berhasil ditutup.", "success");
@@ -495,10 +467,50 @@ export default function Attendance() {
     );
   };
 
+  // Open Sesi Now (for scheduled sessions)
+  const handleOpenSessionNow = async (session: any) => {
+
+    audio.playPrimaryClick();
+
+    try {
+      const { data: dbSess } = await supabase
+        .from("attendance_sessions")
+        .select("*")
+        .eq("id", session.id)
+        .limit(1);
+
+      if (dbSess && dbSess[0]) {
+        const parsed = parseSession(dbSess[0]);
+        parsed.status = "open";
+        const serializedName = serializeSession(parsed);
+        
+        const { error: updErr } = await supabase
+          .from("attendance_sessions")
+          .update({ 
+            activity_name: serializedName, 
+            status: "open",
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", session.id);
+
+        if (updErr) throw updErr;
+      }
+
+      await supabase.from("activity_logs").insert([{
+        message: `Membuka sesi presensi secara manual: ${session.activity_name}`
+      }]);
+
+      showToast("Sesi presensi berhasil dibuka dan aktif.", "success");
+      fetchData();
+    } catch (err: any) {
+      showToast(`Gagal membuka sesi: ${err.message || "Kesalahan server"}`, "error");
+    }
+  };
+
   // Hadirkan Semua (Bulk Attendance Upgrade)
-  const handlePresentAll = async () => {
-    if (!selectedSession) return;
-    if (selectedSession.status === "closed") {
+  const handlePresentAll = async (session: any) => {
+
+    if (session.status === "closed") {
       showToast("Sesi presensi sudah ditutup.", "error");
       return;
     }
@@ -510,10 +522,11 @@ export default function Attendance() {
         return {
           id: existing?.id || `temp-${m.id}`,
           member_id: m.id,
-          session_id: selectedSession.id,
+          session_id: session.id,
           status: "present",
           notes: "Hadir Semua",
-          check_in_at: existing?.check_in_at || new Date().toISOString()
+          check_in_at: existing?.check_in_at || new Date().toISOString(),
+          source: "admin_manual_bulk"
         };
       });
 
@@ -525,13 +538,14 @@ export default function Attendance() {
         const promises = members.map(async (m) => {
           const existing = records.find(r => r.member_id === m.id);
           const recordData = {
-            session_id: selectedSession.id,
+            session_id: session.id,
             member_id: m.id,
             status: "present",
             manual_override: true,
             manual_override_reason: "Hadir Semua via Koordinator",
             check_in_at: existing?.check_in_at || new Date().toISOString(),
-            notes: "Hadir Semua"
+            notes: "Hadir Semua",
+            source: "admin_manual_bulk"
           };
           const serializedNotes = serializeRecord(recordData, "Hadir Semua");
 
@@ -548,7 +562,7 @@ export default function Attendance() {
             return supabase
               .from("attendance_records")
               .insert([{
-                attendance_session_id: selectedSession.id,
+                attendance_session_id: session.id,
                 member_id: m.id,
                 attendance_status: "present",
                 notes: serializedNotes
@@ -559,35 +573,30 @@ export default function Attendance() {
         await Promise.all(promises);
 
         await supabase.from("activity_logs").insert([{
-          message: `Mepresensi seluruh anggota aktif untuk sesi: ${selectedSession.activity_name}`
+          message: `Mepresensi seluruh anggota aktif untuk sesi: ${session.activity_name}`
         }]);
 
-        fetchSessionRecords(selectedSession.id);
+        fetchSessionRecords(session.id);
       } catch (err: any) {
         console.error(err);
         showToast("Terjadi kesalahan saat menghadirkan semua anggota.", "error");
       }
     };
 
-    const hasManualRecords = records.some(r => r.status && r.status.toLowerCase() !== "present");
-    if (hasManualRecords) {
-      triggerConfirm(
-        "Hadirkan Semua Anggota",
-        "Tindakan ini akan menimpa seluruh status (Izin, Sakit, Alfa) menjadi Hadir. Lanjutkan?",
-        "warning",
-        executePresentAll
-      );
-    } else {
-      executePresentAll();
-    }
+    triggerConfirm(
+      "Hadirkan Semua Anggota",
+      "Yakin ingin menandai semua anggota sebagai Hadir?",
+      "warning",
+      executePresentAll
+    );
   };
 
   // Reset Semua Presensi
-  const handleResetAll = async () => {
-    if (!selectedSession) return;
+  const handleResetAll = async (session: any) => {
+
     triggerConfirm(
       "Reset Semua Presensi",
-      "Apakah Anda yakin ingin meriset seluruh presensi untuk sesi ini? Semua data kehadiran akan dihapus.",
+      "Apakah Anda yakin ingin menghapus semua rekam kehadiran pada sesi ini?",
       "warning",
       async () => {
         setRecords([]);
@@ -598,15 +607,15 @@ export default function Attendance() {
           const { error: delErr } = await supabase
             .from("attendance_records")
             .delete()
-            .eq("attendance_session_id", selectedSession.id);
+            .eq("attendance_session_id", session.id);
 
           if (delErr) throw delErr;
 
           await supabase.from("activity_logs").insert([{
-            message: `Mereset seluruh catatan presensi untuk sesi: ${selectedSession.activity_name}`
+            message: `Mereset seluruh catatan presensi untuk sesi: ${session.activity_name}`
           }]);
 
-          fetchSessionRecords(selectedSession.id);
+          fetchSessionRecords(session.id);
         } catch (err: any) {
           console.error(err);
           showToast("Gagal meriset data presensi.", "error");
@@ -616,8 +625,8 @@ export default function Attendance() {
   };
 
   // Hapus Sesi
-  const handleDeleteSession = async () => {
-    if (!selectedSession) return;
+  const handleDeleteSession = async (session: any) => {
+
     triggerConfirm(
       "Hapus Sesi Presensi",
       "Apakah Anda yakin ingin menghapus sesi presensi ini? Sesi beserta seluruh data di dalamnya akan dihapus secara permanen.",
@@ -630,20 +639,20 @@ export default function Attendance() {
           await supabase
             .from("attendance_records")
             .delete()
-            .eq("attendance_session_id", selectedSession.id);
+            .eq("attendance_session_id", session.id);
 
           const { error: delErr } = await supabase
             .from("attendance_sessions")
             .delete()
-            .eq("id", selectedSession.id);
+            .eq("id", session.id);
 
           if (delErr) throw delErr;
 
           await supabase.from("activity_logs").insert([{
-            message: `Menghapus sesi presensi: ${selectedSession.activity_name}`
+            message: `Menghapus sesi presensi: ${session.activity_name}`
           }]);
 
-          const remainingSessions = sessions.filter(s => s.id !== selectedSession.id);
+          const remainingSessions = sessions.filter(s => s.id !== session.id);
           setSessions(remainingSessions);
           if (remainingSessions.length > 0) {
             setSelectedSession(remainingSessions[0]);
@@ -663,7 +672,7 @@ export default function Attendance() {
   };
 
   // View Recap & Scroll Smoothly
-  const handleViewRecap = () => {
+  const handleViewRecap = (session: any) => {
     audio.playSecondaryClick();
     setIsRecapExpanded(true);
     setTimeout(() => {
@@ -675,9 +684,9 @@ export default function Attendance() {
   };
 
   // Update Individual Member Status
-  const handleUpdateStatus = async (memberId: string, newStatus: string) => {
-    if (!selectedSession) return;
-    if (selectedSession.status === "closed") {
+  const handleUpdateStatus = async (session: any, memberId: string, newStatus: string) => {
+
+    if (session.status === "closed") {
       showToast("Sesi presensi sudah ditutup dan tidak dapat diedit.", "error");
       return;
     }
@@ -685,10 +694,42 @@ export default function Attendance() {
     const internalStatus = STATUS_MAP[newStatus] || newStatus;
     const prevRecords = [...records];
     const existingIndex = records.findIndex(r => r.member_id === memberId);
-    let updatedRecords = [...records];
+    const memberName = members.find(m => m.id === memberId)?.full_name || "Anggota KKN";
 
+    // If changing to "Alfa" (Absent/Alfa), we delete the record from database
+    if (newStatus === "Alfa" || internalStatus === "absent") {
+      const existingRecord = records.find(r => r.member_id === memberId);
+      if (existingRecord) {
+        const updatedRecords = records.filter(r => r.member_id !== memberId);
+        setRecords(updatedRecords);
+
+        try {
+          const { error: delErr } = await supabase
+            .from("attendance_records")
+            .delete()
+            .eq("id", existingRecord.id);
+
+          if (delErr) throw delErr;
+
+          await supabase.from("activity_logs").insert([{
+            message: `Menghapus rekam presensi ${memberName} (Status diubah ke Alfa). Sesi: ${session.activity_name}`
+          }]);
+
+          showToast(`Status ${memberName} diperbarui menjadi Alfa.`, "success");
+          audio.playSuccess();
+          fetchSessionRecords(session.id);
+        } catch (err: any) {
+          console.error(err);
+          setRecords(prevRecords); // Rollback
+          showToast(`Gagal memperbarui status ${memberName}: ${err.message || "Kesalahan server"}`, "error");
+        }
+      }
+      return;
+    }
+
+    let updatedRecords = [...records];
     const recordData = {
-      session_id: selectedSession.id,
+      session_id: session.id,
       member_id: memberId,
       status: internalStatus,
       manual_override: true,
@@ -709,7 +750,7 @@ export default function Attendance() {
       updatedRecords.push({
         id: `temp-${Date.now()}`,
         member_id: memberId,
-        session_id: selectedSession.id,
+        session_id: session.id,
         status: internalStatus,
         notes: "Diperbarui oleh Koordinator KKN",
         check_in_at: new Date().toISOString()
@@ -717,7 +758,6 @@ export default function Attendance() {
     }
 
     setRecords(updatedRecords);
-    const memberName = members.find(m => m.id === memberId)?.full_name || "Anggota KKN";
 
     try {
       if (existingIndex > -1) {
@@ -734,7 +774,7 @@ export default function Attendance() {
         if (updErr) throw updErr;
       } else {
         const payload = {
-          attendance_session_id: selectedSession.id,
+          attendance_session_id: session.id,
           member_id: memberId,
           attendance_status: internalStatus,
           notes: serializedNotes
@@ -748,13 +788,13 @@ export default function Attendance() {
       }
 
       await supabase.from("activity_logs").insert([{
-        message: `Status ${memberName} diperbarui menjadi ${newStatus}. Sesi: ${selectedSession.activity_name}`
+        message: `Status ${memberName} diperbarui menjadi ${newStatus}. Sesi: ${session.activity_name}`
       }]);
 
       showToast(`Status ${memberName} diperbarui menjadi ${newStatus}.`, "success");
       audio.playSuccess();
       
-      fetchSessionRecords(selectedSession.id);
+      fetchSessionRecords(session.id);
     } catch (err: any) {
       console.error(err);
       setRecords(prevRecords); // Rollback
@@ -763,9 +803,9 @@ export default function Attendance() {
   };
 
   // PDF Official Clean Layout Generator
-  const handlePrintPDFReport = () => {
+  const handlePrintPDFReport = (session: any) => {
     audio.playPrimaryClick();
-    if (!selectedSession) return;
+
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
@@ -787,7 +827,7 @@ export default function Attendance() {
     const htmlContent = `
       <html>
         <head>
-          <title>Laporan Kehadiran KKN - ${selectedSession.activity_name}</title>
+          <title>Laporan Kehadiran KKN - ${session.activity_name}</title>
           <style>
             body {
               font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -892,14 +932,14 @@ export default function Attendance() {
 
           <div class="meta-grid">
             <div class="meta-item">
-              <strong>Nama Aktivitas:</strong> ${selectedSession.activity_name}<br>
-              <strong>Program Kerja:</strong> ${selectedSession.programs?.title || "Umum / Non-Proker"}<br>
-              <strong>Tanggal Sesi:</strong> ${new Date(selectedSession.date).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+              <strong>Nama Aktivitas:</strong> ${session.activity_name}<br>
+              <strong>Program Kerja:</strong> ${session.programs?.title || "Umum / Non-Proker"}<br>
+              <strong>Tanggal Sesi:</strong> ${new Date(session.date).toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
             </div>
             <div class="meta-item">
-              <strong>Jam Presensi:</strong> ${selectedSession.opens_at} - ${selectedSession.closes_at} WIB<br>
-              <strong>Lokasi / Posko:</strong> ${selectedSession.location_name}<br>
-              <strong>Status Sesi:</strong> ${selectedSession.status === "open" ? "AKTIF" : "SELESAI"}
+              <strong>Jam Presensi:</strong> ${session.opens_at} - ${session.closes_at} WIB<br>
+              <strong>Lokasi / Posko:</strong> ${session.location_name}<br>
+              <strong>Status Sesi:</strong> ${session.status === "open" ? "AKTIF" : "SELESAI"}
             </div>
           </div>
 
@@ -1026,405 +1066,234 @@ export default function Attendance() {
         </div>
       )}
 
-      {/* Session selector */}
-      <div className="nm-card-3d p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3.5 flex-1 w-full">
-          <label className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
-            PILIH SESI PRESENSI
-          </label>
-          <select
-            value={selectedSession?.id || ""}
-            onChange={(e) => {
-              const sess = sessions.find(s => s.id === e.target.value);
-              if (sess) handleSelectSession(sess);
-            }}
-            className="w-full nm-inset p-2.5 rounded-xl font-mono text-xs text-cyan-400 focus:outline-none bg-transparent cursor-pointer"
-          >
-            {sessions.length === 0 ? (
-              <option value="">Belum Ada Sesi</option>
-            ) : (
-              sessions.map((session) => (
-                <option key={session.id} value={session.id} className="bg-[#0b0e14] text-white">
-                  [{session.status === "open" ? "AKTIF" : "SELESAI"}] {session.activity_name} ({session.date})
-                </option>
-              ))
-            )}
-          </select>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="py-20 text-center flex flex-col items-center justify-center space-y-4">
-          <svg className="animate-spin h-7 w-7 text-cyan-400" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          <span className="text-[10px] text-slate-500 font-mono uppercase tracking-widest text-cyan-400/80 animate-pulse">Sinkronisasi Database Presensi...</span>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          
-          {/* Active Session details block */}
-          {selectedSession ? (
-            <div className="nm-card-3d p-6 space-y-4 relative overflow-hidden border border-white/5">
+            <div className="space-y-6">
+        {loading ? (
+          <div className="py-20 text-center flex flex-col items-center justify-center space-y-4">
+            <svg className="animate-spin h-7 w-7 text-cyan-400" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-[10px] text-slate-500 font-mono uppercase tracking-widest text-cyan-400/80 animate-pulse">Sinkronisasi Database Presensi...</span>
+          </div>
+        ) : sessions.length === 0 ? (
+          <div className="nm-card-3d p-10 flex flex-col items-center justify-center text-center">
+            <Info size={30} className="text-slate-500 mb-3 animate-pulse" />
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Belum Ada Sesi Presensi</h3>
+            <p className="text-[10.5px] text-slate-400 mt-1 max-w-sm font-mono">
+              Belum ada sesi presensi KKN. Buat sesi pertama untuk memulai pencatatan kehadiran manual.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {sessions.map((session) => {
+              const sessionRecords = allRecords.filter(r => r.attendance_session_id === session.id);
               
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
-                <div className="flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full ${selectedSession.status === "open" ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
-                  <span className={`text-[10px] font-mono font-black uppercase tracking-widest ${selectedSession.status === "open" ? "text-emerald-400" : "text-red-400"}`}>
-                    {selectedSession.status === "open" ? "SESI PRESENSI AKTIF" : "SESI DITUTUP"}
-                  </span>
-                  {showSyncIndicator && (
-                    <span className="text-[9px] font-mono text-cyan-400 animate-pulse font-bold ml-2">
-                      (Data diperbarui)
-                    </span>
+              const presentCount = sessionRecords.filter(r => r.status === "Present" || r.status === "Hadir").length;
+              const permissionCount = sessionRecords.filter(r => r.status === "Permission" || r.status === "Izin").length;
+              const sickCount = sessionRecords.filter(r => r.status === "Sick" || r.status === "Sakit").length;
+              const absentCount = sessionRecords.filter(r => r.status === "Absent" || r.status === "Alfa").length;
+
+              const isExpanded = expandedSessionId === session.id;
+
+              return (
+                <div key={session.id} className="space-y-6">
+                  {/* Open session block */}
+                  {session.status === "open" && (
+                    <div className="nm-card-3d p-6 space-y-4 relative overflow-hidden border border-white/5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
+                        <div className="flex items-center flex-wrap gap-2">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="text-[10px] font-mono font-black uppercase tracking-widest text-emerald-400">
+                            SESI PRESENSI AKTIF
+                          </span>
+                          {showSyncIndicator && (
+                            <span className="text-[9px] font-mono text-cyan-400 animate-pulse font-bold ml-2">
+                              (Data diperbarui)
+                            </span>
+                          )}
+                          <div className="ml-2">
+                            <SessionCountdown closesAt={session.closes_at} date={session.date} />
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-md bg-white/[0.03] border border-white/[0.08] text-[8px] font-mono text-slate-400">
+                          {session.activity_type || "Program Kerja"}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h3 className="text-base font-black text-white uppercase tracking-wider">{session.activity_name}</h3>
+                        {session.description && <p className="text-[11px] text-slate-400 mt-1 font-mono leading-relaxed">{session.description}</p>}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 nm-inset p-3.5 font-mono text-[10px] text-slate-300">
+                        <div>
+                          <span className="block text-[8px] text-slate-500 uppercase tracking-widest font-black mb-1">Waktu Presensi</span>
+                          <span className="text-white flex items-center gap-1.5 font-bold"><Clock size={12} className="text-cyan-400" />{session.opens_at} - {session.closes_at}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[8px] text-slate-500 uppercase tracking-widest font-black mb-1">Lokasi Kegiatan</span>
+                          <span className="text-white flex items-center gap-1.5 font-bold truncate"><MapPin size={12} className="text-cyan-400" />{session.location_name}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[8px] text-slate-500 uppercase tracking-widest font-black mb-1">Kehadiran (Hadir / Total)</span>
+                          <span className="text-cyan-300 flex items-center gap-1.5 font-bold"><Users size={12} className="text-cyan-300" />{presentCount} / {members.length} Hadir</span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2.5 pt-2 z-30 relative pointer-events-auto">
+                        <button type="button" onClick={() => handlePresentAll(session)} className="nm-btn px-3.5 py-2 text-[10px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer z-40 relative pointer-events-auto text-cyan-400"><CheckCircle size={12} /><span>Hadirkan Semua</span></button>
+                        <button type="button" onClick={() => handleResetAll(session)} className="nm-btn px-3.5 py-2 text-[10px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer z-40 relative pointer-events-auto text-amber-400"><RefreshCw size={12} /><span>Reset Semua Presensi</span></button>
+                        <button type="button" onClick={() => handleDeleteSession(session)} className="nm-btn px-3.5 py-2 text-[10px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 text-red-400 cursor-pointer z-40 relative pointer-events-auto"><Trash2 size={12} /><span>Hapus Sesi</span></button>
+                        <button type="button" onClick={() => handleCloseSessionNow(session)} className="nm-btn px-3.5 py-2 text-[10px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 text-red-400 border border-red-500/25 cursor-pointer hover:border-red-500/40 z-40 relative pointer-events-auto"><Lock size={12} /><span>Tutup Sesi Sekarang</span></button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Compact Member Participant Attendance Table (Shown only for open session) */}
+                  {session.status === "open" && (
+                    <div className="nm-card-3d p-6 space-y-4">
+                      <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                        <span className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest">DAFTAR PESERTA KEHADIRAN</span>
+                      </div>
+                      <div className="rounded-2xl border border-white/5 overflow-hidden bg-black/30 text-[10.5px] font-mono">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-950/40 border-b border-white/5 text-slate-400 text-[8px] uppercase tracking-widest">
+                                <th className="p-3 font-black">Anggota KKN</th>
+                                <th className="p-3 font-black">NIM</th>
+                                <th className="p-3 font-black text-center">Status & Waktu</th>
+                                <th className="p-3 font-black text-center">Data Presensi</th>
+                                <th className="p-3 font-black text-right">Aksi Manual</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {members.map((member) => {
+                                const rec = sessionRecords.find(r => r.member_id === member.id);
+                                const isSessionActive = true;
+                                let indStatus = "Alfa";
+                                if (rec) { indStatus = REV_STATUS_MAP[rec.status] || "Hadir"; } else if (isSessionActive) { indStatus = "Belum Absen"; }
+                                
+                                return (
+                                  <tr key={member.id} className="border-b border-white/[0.02] hover:bg-white/[0.01] transition-colors group">
+                                    <td className="p-3 flex items-center gap-3">
+                                      {getMemberPhotoUrl(member) ? (
+                                        <img src={getMemberPhotoUrl(member)!} alt={member.full_name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-full object-cover border border-cyan-500/20 shadow-inner shrink-0"/>
+                                      ) : (
+                                        <div className="w-8 h-8 rounded-full bg-cyan-500/10 border border-cyan-500/25 flex items-center justify-center text-[9px] font-bold text-cyan-400 shrink-0 font-mono">{getInitials(member.full_name)}</div>
+                                      )}
+                                      <span className="text-sm font-bold text-white group-hover:text-cyan-400 transition-colors">{member.full_name}</span>
+                                    </td>
+                                    <td className="p-3"><span className="text-xs font-mono text-slate-400">{member.nim || "-"}</span></td>
+                                    <td className="p-3 text-center">
+                                      <div className="flex flex-col items-center justify-center gap-1.5">
+                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border ${
+                                          indStatus === "Hadir" ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30 shadow-[0_0_10px_rgba(34,211,238,0.2)]" :
+                                          indStatus === "Izin" ? "bg-amber-500/10 text-amber-400 border-amber-500/30" :
+                                          indStatus === "Sakit" ? "bg-blue-500/10 text-blue-400 border-blue-500/30" :
+                                          indStatus === "Belum Absen" ? "bg-slate-500/10 text-slate-400 border-slate-500/25" :
+                                          "bg-red-500/10 text-red-400 border-red-500/30"
+                                        }`}>{indStatus}</span>
+                                        {rec?.created_at ? (
+                                          <span className="text-[9px] text-slate-500 font-mono">{new Date(rec.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB</span>
+                                        ) : (<span className="text-[9px] text-slate-600 font-mono">-</span>)}
+                                      </div>
+                                    </td>
+                                    <td className="p-3">
+                                      <div className="flex flex-col items-center gap-2">
+                                        {rec?.source === "public_web" && <span className="text-[8px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">Via Web Publik</span>}
+                                        <div className="flex justify-center gap-2">
+                                          {rec?.latitude && rec?.longitude ? (
+                                            <div className="flex items-center gap-1">
+                                              <a href={`https://www.google.com/maps?q=${rec.latitude},${rec.longitude}`} target="_blank" rel="noreferrer" title={`Buka Maps (Akurasi: ±${Math.round(rec.gps_accuracy_meters || 0)}m)`} className="w-7 h-7 bg-white/5 hover:bg-white/10 rounded border border-white/5 hover:border-cyan-500/30 flex items-center justify-center transition-colors group/btn relative"><MapPin className="w-3.5 h-3.5 text-cyan-400" /></a>
+                                            </div>
+                                          ) : (<span className="text-[9px] text-slate-600 flex items-center gap-1 font-mono"><MapPin className="w-3 h-3 opacity-30" /> -</span>)}
+                                          
+                                          {rec?.photo_path ? (
+                                            <button onClick={() => { window.open(supabase.storage.from("attendance_photos").getPublicUrl(rec.photo_path).data.publicUrl, "_blank"); }} title="Lihat Foto Wajah" className="w-7 h-7 bg-white/5 hover:bg-white/10 rounded border border-white/5 hover:border-cyan-500/30 flex items-center justify-center transition-colors"><Camera className="w-3.5 h-3.5 text-emerald-400" /></button>
+                                          ) : (<span className="text-[9px] text-slate-600 flex items-center gap-1 font-mono"><Camera className="w-3 h-3 opacity-30" /> -</span>)}
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="p-3 text-right">
+                                      <div className="flex justify-end gap-1.5 opacity-40 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => handleUpdateStatus(session, member.id, "Hadir")} className="w-6 h-6 rounded bg-white/5 hover:bg-cyan-500/20 text-slate-400 hover:text-cyan-400 flex items-center justify-center transition-colors border border-transparent hover:border-cyan-500/30" title="Set Hadir"><CheckCircle2 className="w-3.5 h-3.5" /></button>
+                                        <button onClick={() => handleUpdateStatus(session, member.id, "Alfa")} className="w-6 h-6 rounded bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 flex items-center justify-center transition-colors border border-transparent hover:border-red-500/30" title="Set Alfa"><XCircle className="w-3.5 h-3.5" /></button>
+                                        <select value={indStatus} onChange={(e) => handleUpdateStatus(session, member.id, e.target.value)} className="w-16 h-6 rounded bg-white/5 hover:bg-white/10 text-slate-300 text-[9px] font-mono border border-white/10 focus:outline-none focus:border-cyan-400/50 cursor-pointer">
+                                          <option value="Hadir">Hadir</option>
+                                          <option value="Izin">Izin</option>
+                                          <option value="Sakit">Sakit</option>
+                                          <option value="Alfa">Alfa</option>
+                                          <option value="Belum Absen" disabled>Belum</option>
+                                        </select>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Folder recap section for closed session */}
+                  {session.status === "closed" && (
+                    <div className="nm-card-3d overflow-hidden">
+                      <button type="button" onClick={() => setExpandedSessionId(isExpanded ? null : session.id)} className="w-full p-4 flex items-center justify-between text-left cursor-pointer hover:bg-white/[0.02] transition-colors">
+                        <div className="flex items-center gap-3">
+                          <Folder className="text-amber-400 shrink-0" size={18} />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-[11px] font-mono font-black tracking-widest text-white uppercase">REKAP PRESENSI</h4>
+                              <span className="px-1.5 py-0.5 rounded-sm bg-amber-500/10 text-amber-400 text-[8px] font-black uppercase tracking-widest border border-amber-500/20">SELESAI</span>
+                            </div>
+                            <span className="text-[9px] font-mono text-slate-400 uppercase">Sesi: {session.activity_name} • (Hadir: {presentCount}, Izin: {permissionCount}, Sakit: {sickCount}, Alfa: {absentCount})</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9.5px] font-mono font-bold text-amber-400 mr-2">{isExpanded ? "Tutup" : "Lihat Detail"}</span>
+                          {isExpanded ? <ChevronUp size={16} className="text-amber-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+                        </div>
+                      </button>
+
+                      <AnimatePresence initial={false}>
+                        {isExpanded && (
+                          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: "easeInOut" }} className="overflow-hidden border-t border-white/5">
+                            <div className="p-6 space-y-6">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
+                                <div>
+                                  <span className="text-[8.5px] font-mono font-extrabold text-amber-400 uppercase tracking-widest">Laporan Data Sesi</span>
+                                  <h4 className="text-xs font-black text-slate-300 font-mono uppercase mt-0.5">Ringkasan Grafik Kehadiran</h4>
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <button type="button" onClick={() => handleOpenSessionNow(session)} className="nm-btn px-3 py-1.5 text-[9px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-400 border border-emerald-500/25 cursor-pointer hover:border-emerald-500/40"><Unlock size={11} /> Buka Kembali Sesi</button>
+                                  <button type="button" onClick={() => handleDeleteSession(session)} className="nm-btn px-3 py-1.5 text-[9px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 text-red-400 border border-red-500/25 cursor-pointer hover:border-red-500/40"><Trash2 size={11} /> Hapus Sesi</button>
+                                  <button onClick={() => handlePrintPDFReport(session)} className="nm-btn text-rose-400 px-3.5 py-1.5 text-[9.5px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"><Printer size={12} /><span>Export PDF</span></button>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-4 gap-2.5 text-center font-mono">
+                                <div className="nm-inset p-2.5 border border-cyan-500/10"><span className="block text-cyan-400 font-extrabold text-sm">{presentCount}</span><span className="text-[8px] text-slate-400 uppercase font-black tracking-wider block mt-0.5">Hadir</span></div>
+                                <div className="nm-inset p-2.5 border border-amber-500/10"><span className="block text-amber-400 font-extrabold text-sm">{permissionCount}</span><span className="text-[8px] text-slate-400 uppercase font-black tracking-wider block mt-0.5">Izin</span></div>
+                                <div className="nm-inset p-2.5 border border-indigo-500/10"><span className="block text-indigo-400 font-extrabold text-sm">{sickCount}</span><span className="text-[8px] text-slate-400 uppercase font-black tracking-wider block mt-0.5">Sakit</span></div>
+                                <div className="nm-inset p-2.5 border border-red-500/10"><span className="block text-red-400 font-extrabold text-sm">{absentCount}</span><span className="text-[8px] text-slate-400 uppercase font-black tracking-wider block mt-0.5">Alfa</span></div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   )}
                 </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
-                <span className="px-2 py-0.5 rounded-md bg-white/[0.03] border border-white/[0.08] text-[8px] font-mono text-slate-400">
-                  {selectedSession.activity_type || "Program Kerja"}
-                </span>
-              </div>
 
-              <div>
-                <h3 className="text-base font-black text-white uppercase tracking-wider">
-                  {selectedSession.activity_name}
-                </h3>
-                {selectedSession.description && (
-                  <p className="text-[11px] text-slate-400 mt-1 font-mono leading-relaxed">
-                    {selectedSession.description}
-                  </p>
-                )}
-              </div>
-
-              {/* Informational grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 nm-inset p-3.5 font-mono text-[10px] text-slate-300">
-                <div>
-                  <span className="block text-[8px] text-slate-500 uppercase tracking-widest font-black mb-1">Waktu Presensi</span>
-                  <span className="text-white flex items-center gap-1.5 font-bold">
-                    <Clock size={12} className="text-cyan-400" />
-                    {selectedSession.opens_at} - {selectedSession.closes_at}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[8px] text-slate-500 uppercase tracking-widest font-black mb-1">Lokasi Kegiatan</span>
-                  <span className="text-white flex items-center gap-1.5 font-bold truncate">
-                    <MapPin size={12} className="text-cyan-400" />
-                    {selectedSession.location_name}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[8px] text-slate-500 uppercase tracking-widest font-black mb-1">Kehadiran (Hadir / Total)</span>
-                  <span className="text-cyan-300 flex items-center gap-1.5 font-bold">
-                    <Users size={12} className="text-cyan-300" />
-                    {presentCount} / {members.length} Hadir
-                  </span>
-                </div>
-              </div>
-
-              {/* Functional Toolbar Actions Bar (Section I) */}
-              <div className="flex flex-wrap items-center gap-2.5 pt-2 z-30 relative pointer-events-auto">
-                <button
-                  type="button"
-                  onClick={handlePresentAll}
-                  disabled={selectedSession.status === "closed"}
-                  className={`nm-btn px-3.5 py-2 text-[10px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer z-40 relative pointer-events-auto ${selectedSession.status === "closed" ? "opacity-50 pointer-events-none" : "text-cyan-400"}`}
-                >
-                  <CheckCircle size={12} />
-                  <span>Hadirkan Semua</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleResetAll}
-                  disabled={selectedSession.status === "closed"}
-                  className={`nm-btn px-3.5 py-2 text-[10px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer z-40 relative pointer-events-auto ${selectedSession.status === "closed" ? "opacity-50 pointer-events-none" : "text-amber-400"}`}
-                >
-                  <RefreshCw size={12} />
-                  <span>Reset Semua Presensi</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleDeleteSession}
-                  className="nm-btn px-3.5 py-2 text-[10px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 text-red-400 cursor-pointer z-40 relative pointer-events-auto"
-                >
-                  <Trash2 size={12} />
-                  <span>Hapus Sesi</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleViewRecap}
-                  className="nm-btn px-3.5 py-2 text-[10px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 text-slate-300 cursor-pointer z-40 relative pointer-events-auto"
-                >
-                  <ClipboardList size={12} className="text-cyan-400" />
-                  <span>Lihat Rekap Absen</span>
-                </button>
-
-                {selectedSession.status === "open" && (
-                  <button
-                    type="button"
-                    onClick={handleCloseSessionNow}
-                    className="nm-btn px-3.5 py-2 text-[10px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 text-red-400 border border-red-500/25 cursor-pointer hover:border-red-500/40 z-40 relative pointer-events-auto"
-                  >
-                    <Lock size={12} />
-                    <span>Tutup Sesi Sekarang</span>
-                  </button>
-                )}
-              </div>
-
-            </div>
-          ) : (
-            <div className="nm-card-3d p-10 flex flex-col items-center justify-center text-center">
-              <Info size={30} className="text-slate-500 mb-3 animate-pulse" />
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Belum Ada Sesi Presensi</h3>
-              <p className="text-[10.5px] text-slate-400 mt-1 max-w-sm font-mono">
-                Belum ada sesi presensi KKN. Buat sesi pertama untuk memulai pencatatan kehadiran manual.
-              </p>
-            </div>
-          )}
-
-          {/* Folder recap section (Section H) */}
-          {selectedSession && (
-            <div className="nm-card-3d overflow-hidden" id="attendance-recap-section">
-              
-              {/* Folder Collapse Header Bar */}
-              <button
-                type="button"
-                onClick={() => setIsRecapExpanded(!isRecapExpanded)}
-                className="w-full p-4.5 flex items-center justify-between text-left cursor-pointer hover:bg-white/[0.01] transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <Folder className="text-cyan-400 shrink-0" size={18} />
-                  <div>
-                    <h4 className="text-[11px] font-mono font-black tracking-widest text-white uppercase">REKAP PRESENSI</h4>
-                    <span className="text-[9px] font-mono text-slate-400 uppercase">
-                      Sesi: {selectedSession.activity_name} • (Hadir: {presentCount}, Izin: {permissionCount}, Sakit: {sickCount}, Alfa: {absentCount})
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-[9.5px] font-mono font-bold text-cyan-400/80 mr-2">
-                    {isRecapExpanded ? "Tutup Folder" : "Klik untuk melihat rekap"}
-                  </span>
-                  {isRecapExpanded ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
-                </div>
-              </button>
-
-              <AnimatePresence initial={false}>
-                {isRecapExpanded && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3, ease: "easeInOut" }}
-                    className="overflow-hidden border-t border-white/5"
-                  >
-                    <div className="p-6 space-y-6">
-                      
-                      {/* Sub header rekap */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
-                        <div>
-                          <span className="text-[8.5px] font-mono font-extrabold text-cyan-400 uppercase tracking-widest">Laporan Data Sesi</span>
-                          <h4 className="text-xs font-black text-slate-300 font-mono uppercase mt-0.5">Ringkasan Grafik Kehadiran</h4>
-                        </div>
-
-                        <button
-                          onClick={handlePrintPDFReport}
-                          className="nm-btn text-rose-400 px-3.5 py-2 text-[9.5px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Printer size={12} />
-                          <span>Export PDF</span>
-                        </button>
-                      </div>
-
-                      {/* Summary counters metrics */}
-                      <div className="grid grid-cols-4 gap-2.5 text-center font-mono">
-                        <div className="nm-inset p-2.5 border border-cyan-500/10">
-                          <span className="block text-cyan-400 font-extrabold text-sm">{presentCount}</span>
-                          <span className="text-[8px] text-slate-400 uppercase font-black tracking-wider block mt-0.5">Hadir</span>
-                        </div>
-                        <div className="nm-inset p-2.5 border border-amber-500/10">
-                          <span className="block text-amber-400 font-extrabold text-sm">{permissionCount}</span>
-                          <span className="text-[8px] text-slate-400 uppercase font-black tracking-wider block mt-0.5">Izin</span>
-                        </div>
-                        <div className="nm-inset p-2.5 border border-indigo-500/10">
-                          <span className="block text-indigo-400 font-extrabold text-sm">{sickCount}</span>
-                          <span className="text-[8px] text-slate-400 uppercase font-black tracking-wider block mt-0.5">Sakit</span>
-                        </div>
-                        <div className="nm-inset p-2.5 border border-red-500/10">
-                          <span className="block text-red-400 font-extrabold text-sm">{absentCount}</span>
-                          <span className="text-[8px] text-slate-400 uppercase font-black tracking-wider block mt-0.5">Alfa</span>
-                        </div>
-                      </div>
-
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-            </div>
-          )}
-
-          {/* Compact Member Participant Attendance Table */}
-          {selectedSession && (
-            <div className="nm-card-3d p-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                <span className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest">
-                  DAFTAR PESERTA KEHADIRAN (10 ANGGOTA KKN)
-                </span>
-                {selectedSession.status === "closed" && (
-                  <span className="text-[9px] font-mono text-red-400 flex items-center gap-1 uppercase font-bold">
-                    <Lock size={11} /> Sesi Terkunci
-                  </span>
-                )}
-              </div>
-
-              <div className="rounded-2xl border border-white/5 overflow-hidden bg-black/30 text-[10.5px] font-mono">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-950/40 border-b border-white/5 text-slate-400 text-[8px] uppercase tracking-widest">
-                        <th className="p-3 font-black">Anggota KKN</th>
-                        <th className="p-3 font-black">NIM</th>
-                        <th className="p-3 font-black text-center">Status & Waktu</th>
-                        <th className="p-3 font-black text-center">Data Presensi</th>
-                        <th className="p-3 font-black text-right">Aksi Manual</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {members.map((member) => {
-                        const rec = records.find(r => r.member_id === member.id);
-                        const rawStatus = rec?.status || "Absent";
-                        const indStatus = REV_STATUS_MAP[rawStatus] || "Alfa";
-                        
-                        return (
-                          <tr key={member.id} className="border-b border-white/[0.02] hover:bg-white/[0.01] transition-colors group">
-                            <td className="p-3 flex items-center gap-3">
-                              {getMemberPhotoUrl(member) ? (
-                                <img 
-                                  src={getMemberPhotoUrl(member)!} 
-                                  alt={member.full_name} 
-                                  referrerPolicy="no-referrer"
-                                  className="w-8 h-8 rounded-full object-cover border border-cyan-500/20 shadow-inner shrink-0"
-                                />
-                              ) : (
-                                <div className="w-8 h-8 rounded-full bg-cyan-500/10 border border-cyan-500/25 flex items-center justify-center text-[9px] font-bold text-cyan-400 shrink-0 font-mono">
-                                  {getInitials(member.full_name)}
-                                </div>
-                              )}
-                              <span className="text-sm font-bold text-white group-hover:text-cyan-400 transition-colors">{member.full_name}</span>
-                            </td>
-                            <td className="p-3">
-                              <span className="text-xs font-mono text-slate-400">{member.nim || "-"}</span>
-                            </td>
-                            <td className="p-3 text-center">
-                              <div className="flex flex-col items-center justify-center gap-1.5">
-                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border ${
-                                  indStatus === "Hadir" ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30 shadow-[0_0_10px_rgba(34,211,238,0.2)]" :
-                                  indStatus === "Izin" ? "bg-amber-500/10 text-amber-400 border-amber-500/30" :
-                                  indStatus === "Sakit" ? "bg-blue-500/10 text-blue-400 border-blue-500/30" :
-                                  "bg-red-500/10 text-red-400 border-red-500/30"
-                                }`}>
-                                  {indStatus}
-                                </span>
-                                {rec?.created_at ? (
-                                  <span className="text-[9px] text-slate-500 font-mono">
-                                    {new Date(rec.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
-                                  </span>
-                                ) : (
-                                  <span className="text-[9px] text-slate-600 font-mono">-</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="p-3">
-                              <div className="flex flex-col items-center gap-2">
-                                {rec?.source === "public_web" && (
-                                  <span className="text-[8px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">Via Web Publik</span>
-                                )}
-                                <div className="flex justify-center gap-2">
-                                  {rec?.latitude && rec?.longitude ? (
-                                    <div className="flex items-center gap-1">
-                                      <a
-                                        href={`https://www.google.com/maps?q=${rec.latitude},${rec.longitude}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        title={`Buka Maps (Akurasi: ±${Math.round(rec.gps_accuracy_meters || 0)}m)`}
-                                        className="w-7 h-7 bg-white/5 hover:bg-white/10 rounded border border-white/5 hover:border-cyan-500/30 flex items-center justify-center transition-colors group/btn relative"
-                                      >
-                                        <MapPin className="w-3.5 h-3.5 text-cyan-400" />
-                                      </a>
-                                      <button
-                                        onClick={() => {
-                                          navigator.clipboard.writeText(`${rec.latitude},${rec.longitude}`);
-                                          showToast("Koordinat disalin.", "info");
-                                        }}
-                                        title="Salin Koordinat"
-                                        className="w-7 h-7 bg-white/5 hover:bg-white/10 rounded border border-white/5 hover:border-cyan-500/30 flex items-center justify-center transition-colors"
-                                      >
-                                        <Copy className="w-3 h-3 text-slate-400" />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <div className="text-[9px] text-slate-600 italic">No GPS</div>
-                                  )}
-                                  
-                                  {rec?.selfie_path ? (
-                                    <button
-                                      onClick={async () => {
-                                        try {
-                                          const { data } = await supabase.storage.from('attendance-selfies').createSignedUrl(rec.selfie_path!, 60);
-                                          if (data?.signedUrl) {
-                                            window.open(data.signedUrl, '_blank');
-                                          } else {
-                                            showToast("Gagal memuat foto", "error");
-                                          }
-                                        } catch (e) {
-                                          showToast("Gagal memuat foto", "error");
-                                        }
-                                      }}
-                                      title="Lihat Foto Selfie"
-                                      className="w-7 h-7 bg-white/5 hover:bg-white/10 rounded border border-white/5 hover:border-cyan-500/30 flex items-center justify-center transition-colors"
-                                    >
-                                      <Camera className="w-3.5 h-3.5 text-green-400" />
-                                    </button>
-                                  ) : (
-                                    <div className="w-7 h-7 flex items-center justify-center">
-                                      <Camera className="w-3.5 h-3.5 text-slate-600" />
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="p-3 text-right">
-                              <select
-                                value={indStatus}
-                                onChange={(e) => handleUpdateStatus(member.id, member.full_name, e.target.value)}
-                                className="bg-black/60 border border-white/10 rounded-md text-[10px] font-bold text-slate-300 py-1.5 px-2 focus:border-cyan-500/50 outline-none hover:bg-white/5 cursor-pointer ml-auto block"
-                                disabled={submitting}
-                              >
-                                <option value="Hadir">Hadir</option>
-                                <option value="Izin">Izin</option>
-                                <option value="Sakit">Sakit</option>
-                                <option value="Alfa">Alfa</option>
-                              </select>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-        </div>
-      )}
-
-      {/* COMPACT MODAL FOR NEW SESSION */}
+            {/* COMPACT MODAL FOR NEW SESSION */}
       <AnimatePresence>
         {showCreateModal && (
           <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
@@ -1437,177 +1306,138 @@ export default function Attendance() {
             />
 
             <motion.div
-              initial={{ opacity: 0, scale: 0.98, y: 15 }}
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.98, y: 15 }}
-              className="relative w-full max-w-md nm-card-3d overflow-hidden"
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="nm-card-3d max-w-md w-full relative max-h-[85vh] flex flex-col overflow-hidden my-auto"
             >
-              {/* Top accent glow line */}
-              <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-cyan-500 via-indigo-500 to-cyan-500" />
-
-              <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
-                    <UserCheck size={14} />
-                  </div>
-                  <span className="text-xs font-mono font-black text-white tracking-widest uppercase">
-                    SESI PRESENSI BARU
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-white/[0.04] p-5 shrink-0">
+                <div>
+                  <span className="text-[7.5px] font-mono font-black tracking-widest text-cyan-400 block uppercase">
+                    PENCATATAN BARU
                   </span>
+                  <h3 className="text-xs font-black text-white uppercase tracking-wider mt-0.5 font-sans">
+                    Sesi Presensi Baru
+                  </h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="w-7 h-7 rounded-full bg-white/[0.03] hover:bg-white/[0.08] text-slate-400 hover:text-white transition-all flex items-center justify-center cursor-pointer border border-white/5"
+                  className="p-1.5 rounded-xl bg-[#0b0e17] shadow-[-2px_-2px_6px_rgba(255,255,255,0.02),_2px_2px_6px_rgba(0,0,0,0.5)] border border-white/[0.01] text-slate-400 hover:text-white transition-all active:shadow-[inset_-1px_-1px_4px_rgba(255,255,255,0.01),_inset_1px_1px_4px_rgba(0,0,0,0.5)] cursor-pointer"
                 >
-                  <X size={13} />
+                  <X size={14} />
                 </button>
               </div>
 
               {error && (
-                <p className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-[10px] text-red-400 font-mono">
-                  {error}
-                </p>
+                <div className="px-5 pt-4">
+                  <p className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-[10px] text-red-400 font-mono">
+                    {error}
+                  </p>
+                </div>
               )}
 
-              <form onSubmit={handleCreateSession} className="mt-5 space-y-4">
-                {/* Activity Name */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">Nama Kegiatan</label>
-                  <input
-                    type="text"
-                    required
-                    value={activityName}
-                    onChange={(e) => setActivityName(e.target.value)}
-                    placeholder="Nama kegiatan (contoh: Rapat Mingguan)..."
-                    className="w-full bg-[#05070a]/80 border border-white/[0.06] focus:border-cyan-400/50 p-3 rounded-2xl font-sans text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all placeholder:text-slate-600"
-                  />
-                </div>
-
-                {/* Date & Time Window */}
-                <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={handleCreateSession} className="flex flex-col flex-1 min-h-0 text-left">
+                {/* Scrollable Form Body */}
+                <div className="overflow-y-auto flex-1 p-5 space-y-4">
+                  {/* Activity Name */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">Tanggal</label>
+                    <label className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest block">Nama Kegiatan</label>
+                    <input
+                      type="text"
+                      required
+                      value={activityName}
+                      onChange={(e) => setActivityName(e.target.value)}
+                      placeholder="Nama kegiatan (contoh: Rapat Mingguan)..."
+                      className="w-full h-11 nm-input px-3.5 text-xs font-semibold placeholder:text-slate-600 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Date & Time Window */}
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest block">Tanggal</label>
                     <input
                       type="date"
                       required
                       value={sessionDate}
                       onChange={(e) => setSessionDate(e.target.value)}
-                      className="w-full bg-[#05070a]/80 border border-white/[0.06] focus:border-cyan-400/50 p-3 rounded-2xl font-mono text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                      className="w-full h-11 nm-input px-3.5 text-xs font-semibold focus:outline-none"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">Jam Aktif</label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <label className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest block">Jam Aktif</label>
+                    <div className="grid grid-cols-2 gap-3">
                       <input
                         type="time"
                         required
                         value={opensAt}
                         onChange={(e) => setOpensAt(e.target.value)}
-                        className="w-full bg-[#05070a]/80 border border-white/[0.06] p-3 text-center font-mono text-xs text-white focus:outline-none focus:border-cyan-400/50 rounded-2xl focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                        className="w-full h-11 nm-input px-3.5 text-xs font-semibold focus:outline-none text-center"
                       />
                       <input
                         type="time"
                         required
                         value={closesAt}
                         onChange={(e) => setClosesAt(e.target.value)}
-                        className="w-full bg-[#05070a]/80 border border-white/[0.06] p-3 text-center font-mono text-xs text-white focus:outline-none focus:border-cyan-400/50 rounded-2xl focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                        className="w-full h-11 nm-input px-3.5 text-xs font-semibold focus:outline-none text-center"
                       />
                     </div>
                   </div>
-                </div>
 
-                {/* Location Posko */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">Lokasi</label>
-                  <input
-                    type="text"
-                    value={locationName}
-                    onChange={(e) => setLocationName(e.target.value)}
-                    placeholder="Nama lokasi atau posko..."
-                    className="w-full bg-[#05070a]/80 border border-white/[0.06] focus:border-cyan-400/50 p-3 rounded-2xl font-sans text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all placeholder:text-slate-600"
-                  />
-                </div>
+                  {/* Location Posko */}
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest block">Lokasi</label>
+                    <input
+                      type="text"
+                      value={locationName}
+                      onChange={(e) => setLocationName(e.target.value)}
+                      placeholder="Nama lokasi atau posko..."
+                      className="w-full h-11 nm-input px-3.5 text-xs font-semibold placeholder:text-slate-600 focus:outline-none"
+                    />
+                  </div>
 
-                {/* Advanced Public Absensi Settings */}
-                <div className="space-y-3 pt-3 border-t border-white/[0.06]">
-                  <h4 className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-widest">Pengaturan Absensi Publik</h4>
-                  
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs text-slate-300 font-mono cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={isPublic} 
-                        onChange={(e) => setIsPublic(e.target.checked)} 
-                        className="accent-cyan-500 w-3.5 h-3.5 bg-black/50 border border-white/20 rounded cursor-pointer"
-                      />
-                      Aktifkan Absensi Publik (Tampil di Beranda)
-                    </label>
-                    <label className="flex items-center gap-2 text-xs text-slate-300 font-mono cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={requireGps} 
-                        onChange={(e) => setRequireGps(e.target.checked)} 
-                        className="accent-cyan-500 w-3.5 h-3.5 bg-black/50 border border-white/20 rounded cursor-pointer"
-                      />
-                      Wajib GPS Location
-                    </label>
-                    <label className="flex items-center gap-2 text-xs text-slate-300 font-mono cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={requireSelfie} 
-                        onChange={(e) => setRequireSelfie(e.target.checked)} 
-                        className="accent-cyan-500 w-3.5 h-3.5 bg-black/50 border border-white/20 rounded cursor-pointer"
-                      />
-                      Wajib Foto Selfie (Kamera Langsung)
-                    </label>
-                    <label className="flex items-center gap-2 text-xs text-slate-300 font-mono cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={requirePhotoFaceCheck} 
-                        onChange={(e) => setRequirePhotoFaceCheck(e.target.checked)} 
-                        className="accent-cyan-500 w-3.5 h-3.5 bg-black/50 border border-white/20 rounded cursor-pointer"
-                      />
-                      Wajib Deteksi Wajah/Orang
-                    </label>
-                    <label className="flex items-center gap-2 text-xs text-slate-300 font-mono cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={autoCloseEnabled} 
-                        onChange={(e) => setAutoCloseEnabled(e.target.checked)} 
-                        className="accent-cyan-500 w-3.5 h-3.5 bg-black/50 border border-white/20 rounded cursor-pointer"
-                      />
-                      Auto Close Sesuai Jam Tutup
-                    </label>
+                  {/* Deskripsi */}
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest block">Deskripsi</label>
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Keterangan singkat..."
+                      rows={2}
+                      className="w-full nm-input px-3.5 py-3 text-xs font-semibold placeholder:text-slate-600 focus:outline-none resize-none"
+                    />
                   </div>
                 </div>
 
-                {/* Description */}
-                <div className="space-y-1.5 pt-2">
-                  <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">Deskripsi</label>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Keterangan singkat..."
-                    rows={2}
-                    className="w-full bg-[#05070a]/80 border border-white/[0.06] focus:border-cyan-400/50 p-3 rounded-2xl font-sans text-xs text-white focus:outline-none resize-none focus:ring-1 focus:ring-cyan-500/20 transition-all placeholder:text-slate-600"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-white/[0.06] mt-5">
+                <div className="p-5 border-t border-white/[0.04] flex items-center justify-end gap-3 shrink-0">
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="px-4 py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.06] text-slate-400 hover:text-white transition-all text-xs font-sans font-bold uppercase tracking-wider cursor-pointer"
+                    className="px-4 py-2.5 rounded-xl bg-[#0b0e17] shadow-[-3px_-3px_8px_rgba(255,255,255,0.02),_3px_3px_8px_rgba(0,0,0,0.5)] border border-white/[0.02] text-slate-400 hover:text-white text-xs font-mono font-bold uppercase transition-all active:shadow-[inset_-2px_-2px_5px_rgba(255,255,255,0.01),_inset_2px_2px_5px_rgba(0,0,0,0.5)] active:translate-y-[1px] cursor-pointer"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
-                    disabled={submitting}
-                    className="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black shadow-[0_0_15px_rgba(6,182,212,0.3)] hover:shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all text-xs font-sans font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer border-0"
+                    disabled={submitting || !activityName || !sessionDate || !opensAt || !closesAt}
+                    className="px-5.5 py-2.5 rounded-xl bg-gradient-to-br from-cyan-500 to-indigo-600 text-slate-950 text-xs font-sans font-black uppercase tracking-wider flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer shadow-[-3px_-3px_10px_rgba(255,255,255,0.05),_3px_3px_10px_rgba(0,0,0,0.6)] active:scale-95 hover:shadow-[0_0_20px_rgba(6,182,212,0.35)]"
                   >
-                    {submitting ? "Membuka Sesi..." : "BUAT SESI"}
+                    {submitting ? (
+                      <span className="flex items-center gap-1">
+                        <svg className="animate-spin h-3.5 w-3.5 text-slate-950" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Membuka...
+                      </span>
+                    ) : (
+                      <>
+                        <CheckCircle size={14} />
+                        <span>BUAT SESI</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>

@@ -11,6 +11,8 @@ export interface ParsedSession {
   date: string;
   opens_at: string;
   closes_at: string;
+  starts_at?: string | null;
+  ends_at?: string | null;
   status: string; // "open" | "closed" | "draft"
   location_name: string;
   latitude: number;
@@ -115,6 +117,8 @@ export function parseSession(session: any): ParsedSession {
     date: new Date().toISOString().split("T")[0],
     opens_at: "00:00",
     closes_at: "23:59",
+    starts_at: session.starts_at || null,
+    ends_at: session.ends_at || null,
     status: "open",
     location_name: "Posko KKN Kelompok 063",
     latitude: DEFAULT_POSKO_LAT,
