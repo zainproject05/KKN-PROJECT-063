@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useLanguage } from "../context/LanguageContext";
 import { audio } from "../utils/audioService";
 import { ShieldAlert, User, LogIn, Lock, CheckCircle2, ArrowLeft, Mail, Eye, EyeOff, HelpCircle, X, PhoneCall } from "lucide-react";
-import { signInWithPassword, isSupabaseConfigured } from "../lib/supabaseClient";
+import { supabase, isSupabaseConfigured } from "../lib/supabaseClient";
 
 
 interface LoginPageProps {
@@ -48,10 +48,7 @@ export default function LoginPage({ onLoginSuccess, onBackToHome }: LoginPagePro
 
     try {
       if (isSupabaseConfigured) {
-        const { data, error: sbError } = await signInWithPassword(
-          username.trim(),
-          password
-        );
+        const { data, error: sbError } = await supabase.auth.signInWithPassword({ email: username.trim(), password });
 
         if (sbError) {
           throw new Error(sbError.message);

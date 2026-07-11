@@ -27,6 +27,18 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
   const [longitude, setLongitude] = useState<number | null>(null);
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [bestLocation, setBestLocation] = useState<{latitude: number, longitude: number, accuracy: number, timestamp: string} | null>(null);
+  const [gpsTimestamp, setGpsTimestamp] = useState<string | null>(null);
+  const watchIdRef = useRef<number | null>(null);
+
+  // Stop watching GPS on unmount
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
   
   const [cameraActive, setCameraActive] = useState(false);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
@@ -65,8 +77,9 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
   const fetchSessions = async () => {
     try {
       const { data, error } = await supabase
-        .from("public_attendance_sessions")
+        .from("attendance_sessions")
         .select("*")
+        .eq("is_public", true)
         .order("starts_at", { ascending: true });
         
       if (error) {
@@ -289,6 +302,59 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
     }
   }, [mapStyleMode]);
 
+  const updateMapMarker = useCallback((lat: number, lng: number, acc: number) => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    
+    map.setView([lng, lat], 18);
+    
+    if (markerRef.current) {
+      markerRef.current.setLngLat([lng, lat]);
+    } else {
+      markerRef.current = new maplibregl.Marker({ color: "#06b6d4" })
+        .setLngLat([lng, lat])
+        .addTo(map);
+    }
+    
+    // Accuracy circle logic
+    let source = map.getSource('accuracy-circle-source') as maplibregl.GeoJSONSource;
+    const circleData: any = {
+      type: 'Feature',
+      geometry: {
+        type: 'Point',
+        coordinates: [lng, lat]
+      },
+      properties: {
+        radius: acc
+      }
+    };
+    
+    if (!source) {
+      map.addSource('accuracy-circle-source', {
+        type: 'geojson',
+        data: circleData
+      });
+      map.addLayer({
+        id: 'accuracy-circle-layer',
+        type: 'circle',
+        source: 'accuracy-circle-source',
+        paint: {
+          'circle-radius': [
+            'interpolate', ['linear'], ['zoom'],
+            10, ['*', ['get', 'radius'], 0.1], // simplified approximation
+            20, ['*', ['get', 'radius'], 2]
+          ],
+          'circle-color': '#06b6d4',
+          'circle-opacity': 0.2,
+          'circle-stroke-width': 1,
+          'circle-stroke-color': '#06b6d4'
+        }
+      });
+    } else {
+      source.setData(circleData);
+    }
+  }, []);
+
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
       showToast("Geolokasi Gagal", "Browser Anda tidak mendukung fitur lokasi GPS.", "error");
@@ -296,20 +362,44 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
     }
     
     setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(
+    
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
+
+    const geoOptions = {
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 0
+    };
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
-        setLatitude(position.coords.latitude);
-        setLongitude(position.coords.longitude);
-        setAccuracy(position.coords.accuracy);
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const acc = position.coords.accuracy;
+
+        setLatitude(lat);
+        setLongitude(lng);
+        setAccuracy(acc);
+        setGpsTimestamp(new Date().toISOString());
+
+        setBestLocation(prev => {
+          if (!prev || acc < prev.accuracy) {
+            return { latitude: lat, longitude: lng, accuracy: acc, timestamp: new Date().toISOString() };
+          }
+          return prev;
+        });
+
+        updateMapMarker(lat, lng, acc);
         setIsLocating(false);
-        showToast("Lokasi Berhasil", "Posisi GPS akurat berhasil diamankan.", "success");
       },
       (error) => {
         console.error("Geolocation error:", error);
         setIsLocating(false);
         showToast("Lokasi Gagal", "Pastikan GPS aktif dan izin lokasi diberikan ke browser.", "error");
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      geoOptions
     );
   };
   
@@ -417,12 +507,12 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
   }, [selectedSession]);
   
   const selectedMember = members.find(m => m.id === selectedMemberId);
-  const canSubmit = selectedSession && selectedMemberId && latitude && longitude && photoBlob && faceDetected && isSessionOpen();
+  const canSubmit = selectedSession && selectedMemberId && bestLocation && photoBlob && faceDetected && isSessionOpen();
   
   const checklist = [
     { label: 'Sesi absensi aktif dipilih', checked: !!selectedSession && isSessionOpen() },
     { label: 'Identitas anggota terverifikasi', checked: !!selectedMemberId },
-    { label: 'Titik koordinat GPS ter-lock', checked: !!latitude && !!longitude },
+    { label: 'Titik koordinat GPS ter-lock', checked: !!bestLocation },
     { label: 'Biometrik wajah tervalidasi', checked: !!photoDataUrl && faceDetected }
   ];
 
@@ -432,19 +522,30 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
       return;
     }
     
+    if (!bestLocation || bestLocation.accuracy > 1000) {
+      showToast("Gagal Mengirim", "Akurasi GPS terlalu rendah (lebih dari 1000 meter). Silakan ambil lokasi ulang.", "error");
+      return;
+    }
+
     setIsSubmitting(true);
     setLoadingMsg("Mengenkripsi & Mengunggah Biometrik...");
     
     try {
-      const { data: existingRec } = await supabase
+      const { data: existingRows, error: existingError } = await supabase
         .from("attendance_records")
         .select("id")
         .eq("attendance_session_id", selectedSessionId)
         .eq("member_id", selectedMemberId)
-        .maybeSingle();
+        .limit(1);
+
+      if (existingError) throw existingError;
+      
+      const existingRec = existingRows?.[0] || null;
 
       if (existingRec) {
-        throw new Error("Anda sudah mengirim absensi untuk sesi ini.");
+        showToast("Presensi Gagal", "Anda sudah melakukan absensi pada sesi ini.", "error");
+        setIsSubmitting(false);
+        return;
       }
 
       const fileName = `${selectedSessionId}_${selectedMemberId}_${Date.now()}.jpg`;
@@ -470,9 +571,9 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
         manual_override_reason: "",
         check_in_at: new Date().toISOString(),
         notes: "Hadir via Web Publik",
-        latitude: latitude,
-        longitude: longitude,
-        gps_accuracy_meters: accuracy,
+        latitude: bestLocation!.latitude,
+        longitude: bestLocation!.longitude,
+        gps_accuracy_meters: bestLocation!.accuracy,
         selfie_path: photoUrl,
         face_detected: faceDetected,
         source: "public_web"
@@ -485,11 +586,11 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
         member_id: selectedMemberId,
         attendance_status: "present",
         notes: serializedNotes,
-        latitude: latitude,
-        longitude: longitude,
+        latitude: bestLocation!.latitude,
+        longitude: bestLocation!.longitude,
         selfie_path: photoUrl,
         source: "public_web",
-        gps_accuracy_meters: accuracy,
+        gps_accuracy_meters: bestLocation!.accuracy,
         face_detected: faceDetected,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -501,16 +602,30 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
         
       if (insertError) {
         console.warn("Direct insert failed, falling back to RPC...", insertError.message);
-        const { error: rpcError } = await supabase.rpc("register_public_attendance", {
+        
+        const { error: rpcError, data: rpcData } = await supabase.rpc("register_public_attendance", {
           p_session_id: selectedSessionId,
           p_member_id: selectedMemberId,
-          p_latitude: latitude,
-          p_longitude: longitude,
-          p_accuracy: accuracy,
-          p_photo_url: photoUrl
+          p_attendance_status: "present",
+          p_latitude: bestLocation!.latitude,
+          p_longitude: bestLocation!.longitude,
+          p_gps_accuracy_meters: bestLocation!.accuracy,
+          p_selfie_path: photoUrl,
+          p_evidence_path: null,
+          p_evidence_type: null,
+          p_note: null,
+          p_face_detected: faceDetected,
+          p_person_detected: faceDetected, // approximating from faceDetected
+          p_client_timestamp: new Date().toISOString(),
+          p_user_agent: navigator.userAgent
         });
+
         if (rpcError) {
-          throw new Error(rpcError.message);
+          throw new Error("RPC Error: " + rpcError.message);
+        }
+        
+        if (rpcData && (rpcData as any).ok === false) {
+           throw new Error((rpcData as any).message || "Absensi ditolak oleh sistem.");
         }
       }
       
@@ -529,15 +644,15 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
       setIsSubmitting(false);
       setLoadingMsg("");
     } catch (e: any) {
-      console.error(e);
-      showToast("Presensi Gagal", e.message || "Terjadi kesalahan database.", "error");
+      console.error("Public attendance submit failed:", e);
+      showToast("Presensi Gagal", "Presensi gagal dikirim. Silakan coba lagi.", "error");
       setIsSubmitting(false);
       setLoadingMsg("");
     }
   };
 
   const filteredMembers = searchQuery.trim() === "" 
-    ? [] 
+    ? members 
     : members.filter(m => 
         m.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
         m.nim.includes(searchQuery)
@@ -766,7 +881,7 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
                       <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Lokasi</div>
                       <div className="text-xs font-semibold text-slate-200 mt-1 flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                        <span className="truncate">{selectedSession.location || 'Posko KKN'}</span>
+                        <span className="truncate">{selectedSession.location_name || 'Posko KKN'}</span>
                       </div>
                     </div>
                   </div>
@@ -943,26 +1058,67 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
                 )}
                 
                 {/* Custom Map Coordinates HUD overlay (matching user request image) */}
-                <div className="absolute bottom-3 left-3 right-3 bg-black/75 backdrop-blur-md border border-white/10 rounded-xl p-3 z-10 flex items-center justify-between pointer-events-none">
-                  <div>
-                    <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Koordinat Saat Ini</div>
-                    <div className="text-xs font-mono text-cyan-400 font-bold mt-1">
-                      {latitude ? `${latitude.toFixed(6)}, ${longitude?.toFixed(6)}` : "-7.821178, 110.327217"}
+                <div className="absolute bottom-3 left-3 right-3 bg-black/75 backdrop-blur-md border border-white/10 rounded-xl p-3 z-10 flex flex-col gap-2 pointer-events-none">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Koordinat Terkunci</div>
+                      <div className="text-xs font-mono text-cyan-400 font-bold mt-1">
+                        {bestLocation ? `${bestLocation.latitude.toFixed(6)}, ${bestLocation.longitude.toFixed(6)}` : (latitude ? `${latitude.toFixed(6)}, ${longitude?.toFixed(6)}` : "-, -")}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Akurasi</div>
+                      <div className={`text-xs font-bold mt-1 ${
+                        !bestLocation ? "text-slate-500" :
+                        bestLocation.accuracy <= 50 ? "text-emerald-400" : 
+                        bestLocation.accuracy <= 200 ? "text-cyan-400" : 
+                        bestLocation.accuracy <= 1000 ? "text-amber-400" : "text-red-400"
+                      }`}>
+                        {bestLocation ? `±${Math.round(bestLocation.accuracy)}m` : (accuracy ? `±${Math.round(accuracy)}m` : "-")}
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Akurasi</div>
-                    <div className="text-xs font-bold text-slate-200 mt-1">
-                      {latitude ? `±${Math.round(accuracy || 0)}m` : "±14m"}
+                  {bestLocation && (
+                    <div className="flex items-center justify-between border-t border-white/10 pt-2 mt-1">
+                      <div className="text-[9px] text-slate-400">
+                        Update: {new Date(bestLocation.timestamp).toLocaleTimeString('id-ID')}
+                      </div>
+                      <div className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-white/5 border border-white/10">
+                        {bestLocation.accuracy <= 50 ? "Sangat Akurat" : 
+                         bestLocation.accuracy <= 200 ? "Cukup Akurat" : 
+                         bestLocation.accuracy <= 1000 ? "Kurang Akurat" : "Tidak Akurat"}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
+              
+              {bestLocation && (
+                <div className="flex gap-2 mb-4">
+                  <a 
+                    href={`https://www.google.com/maps?q=${bestLocation.latitude},${bestLocation.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Buka Maps</span>
+                  </a>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${bestLocation.latitude}, ${bestLocation.longitude}`);
+                      showToast("Tersalin", "Koordinat berhasil disalin.", "success");
+                    }}
+                    className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Salin Koordinat</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             <button 
               onClick={handleGetLocation}
-              disabled={isLocating}
               className="w-full py-4 bg-gradient-to-br from-[#121626] to-[#070912] hover:from-[#181d33] hover:to-[#0a0c1a] border-t border-l border-white/10 border-b border-r border-black/60 rounded-2xl flex items-center justify-center gap-3 transition-all cursor-pointer shadow-[4px_4px_12px_rgba(0,0,0,0.5),_-4px_-4px_12px_rgba(255,255,255,0.01),_inset_1px_1px_2px_rgba(255,255,255,0.05)] active:scale-98 disabled:opacity-50"
             >
               {isLocating ? (
@@ -970,7 +1126,7 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
               ) : (
                 <>
                   <Navigation className="w-4 h-4 text-cyan-400" />
-                  <span className="text-xs font-black uppercase tracking-widest text-slate-200">Ambil Lokasi Saya</span>
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-200">{bestLocation ? "Ambil Ulang Lokasi" : "Ambil Lokasi Saya"}</span>
                 </>
               )}
             </button>
@@ -1094,15 +1250,18 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
                 <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Persyaratan Presensi</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {checklist.map((item, i) => (
-                    <div key={i} className="flex items-center gap-2.5">
+                    <div 
+                      key={i} 
+                      className={`flex items-center gap-3 p-3 rounded-xl border-t border-l border-white/5 border-b border-r border-black/50 shadow-[3px_3px_10px_rgba(0,0,0,0.4),_-2px_-2px_6px_rgba(255,255,255,0.02)] transition-all ${item.checked ? 'bg-gradient-to-br from-[#0c1424] to-[#060a12]' : 'bg-gradient-to-br from-[#08090d] to-[#040508]'}`}
+                    >
                       {item.checked ? (
-                        <div className="w-4.5 h-4.5 rounded-full bg-cyan-500/10 flex items-center justify-center border border-cyan-500/30 shrink-0">
-                          <Check className="w-2.5 h-2.5 text-cyan-400" />
+                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-[inset_1px_1px_2px_rgba(255,255,255,0.4),_0_0_8px_rgba(6,182,212,0.4)] shrink-0">
+                          <Check className="w-3.5 h-3.5 text-white" />
                         </div>
                       ) : (
-                        <div className="w-4.5 h-4.5 rounded-full bg-white/5 border border-white/10 shrink-0 flex items-center justify-center" />
+                        <div className="w-6 h-6 rounded-full bg-[#0a0c12] border border-white/5 shadow-[inset_2px_2px_4px_rgba(0,0,0,0.6)] shrink-0 flex items-center justify-center" />
                       )}
-                      <span className={`text-xs font-medium ${item.checked ? 'text-slate-200' : 'text-slate-500'}`}>
+                      <span className={`text-xs font-semibold tracking-wide ${item.checked ? 'text-slate-100' : 'text-slate-500'}`}>
                         {item.label}
                       </span>
                     </div>

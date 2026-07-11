@@ -312,10 +312,7 @@ export default function Attendance() {
       // 4. Fetch Sessions
       const { data: dbSessions } = await supabase
         .from("attendance_sessions")
-        .select(`
-          *,
-          programs(title)
-        `)
+        .select("*")
         .order("created_at", { ascending: false });
       
       const sessionList = (dbSessions || []).map(parseSession);
@@ -453,7 +450,7 @@ export default function Attendance() {
           require_selfie: requireSelfie,
           require_photo_face_check: true,
           auto_close_enabled: true,
-          status: "scheduled",
+          status: "open",
           created_by_member_id: activeSubmittedBy
         }])
         .select()
@@ -790,7 +787,7 @@ export default function Attendance() {
               return (
                 <div key={session.id} className="space-y-6">
                   {/* Open session block */}
-                  {session.status === "open" && (
+                  {session.status !== "closed" && (
                     <div className="nm-card-3d p-6 space-y-4 relative overflow-hidden border border-white/5">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
                         <div className="flex items-center flex-wrap gap-2">
@@ -842,7 +839,7 @@ export default function Attendance() {
                   )}
 
                   {/* Compact Member Participant Attendance Table (Shown only for open session) */}
-                  {session.status === "open" && (
+                  {session.status !== "closed" && (
                     <div className="nm-card-3d p-6 space-y-4">
                       <div className="flex items-center justify-between border-b border-white/5 pb-3">
                         <span className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest">DAFTAR PESERTA KEHADIRAN</span>
@@ -862,7 +859,7 @@ export default function Attendance() {
                             <tbody>
                               {members.map((member) => {
                                 const rec = sessionRecords.find(r => r.member_id === member.id);
-                                const isSessionActive = session.status === "open";
+                                const isSessionActive = session.status !== "closed";
                                 let indStatus = "Alfa";
                                 if (rec) { indStatus = REV_STATUS_MAP[rec.attendance_status] || "Hadir"; } else if (isSessionActive) { indStatus = "Belum Absen"; }
                                 
@@ -1026,7 +1023,7 @@ export default function Attendance() {
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="nm-card-3d max-w-md w-full relative max-h-[85vh] flex flex-col overflow-hidden my-auto"
+              className="nm-card-3d max-w-md w-full relative max-h-[85vh] min-h-0 flex flex-col overflow-hidden"
             >
               {/* Header */}
               <div className="flex items-center justify-between border-b border-white/[0.04] p-5 shrink-0">

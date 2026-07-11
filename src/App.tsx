@@ -8,7 +8,7 @@ import AboutProject from "./components/AboutProject";
 import { PhotoGallery } from "./components/ui/gallery";
 import FacultyCommentsSection from "./components/sections/faculty-comments-section";
 import LoginPage from "./components/LoginPage";
-import { signOut } from "./lib/supabaseClient";
+import { supabase } from "./lib/supabaseClient";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 // Import KKN operational screens
@@ -134,7 +134,7 @@ export default function App() {
     setCurrentUser(null);
     localStorage.removeItem("kkn_is_logged_in");
     localStorage.removeItem("kkn_current_user");
-    await signOut();
+    await supabase.auth.signOut();
     setActiveTab("home");
   };
 
