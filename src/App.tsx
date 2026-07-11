@@ -20,6 +20,13 @@ import Reports from "./components/kkn/Reports";
 import Members from "./components/kkn/Members";
 import Picket from "./components/kkn/Picket";
 import Settings from "./components/kkn/Settings";
+
+import Tasks from "./components/kkn/Tasks";
+import Documents from "./components/kkn/Documents";
+import Announcements from "./components/kkn/Announcements";
+import Agenda from "./components/kkn/Agenda";
+import WhatsAppTemplates from "./components/kkn/WhatsAppTemplates";
+
 import TemplateDivisi from "./components/kkn/TemplateDivisi";
 import WorkspaceLayout from "./components/kkn/WorkspaceLayout";
 import AttendanceCheckIn from "./components/kkn/AttendanceCheckIn";
@@ -235,6 +242,18 @@ export default function App() {
         return <Picket />;
       case "settings":
         return <Settings />;
+
+      case "tasks":
+        return <Tasks />;
+      case "documents":
+        return <Documents />;
+      case "announcements":
+        return <Announcements />;
+      case "agenda":
+        return <Agenda />;
+      case "whatsapp-templates":
+        return <WhatsAppTemplates />;
+
       case "about":
         return <AboutProject />;
       case "gallery":
@@ -289,7 +308,8 @@ export default function App() {
   }
 
   const securedTabs = [
-    "dashboard", "attendance", "programs", "finance", "reports", "template-divisi", "members", "picket", "settings"
+    "dashboard", "attendance", "programs", "finance", "reports", "template-divisi", "members", "picket", "settings",
+    "tasks", "documents", "announcements", "agenda", "whatsapp-templates"
   ];
   const isSecuredTabActive = isLoggedIn && securedTabs.includes(activeTab);
 

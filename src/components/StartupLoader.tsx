@@ -24,7 +24,7 @@ export default function StartupLoader({ onComplete }: { onComplete: () => void }
     }, intervalTime);
 
     return () => clearInterval(timer);
-  }, [onComplete]);
+  }, []);
 
   return (
     <motion.div

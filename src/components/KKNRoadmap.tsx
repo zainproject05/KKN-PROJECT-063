@@ -12,183 +12,217 @@ interface Milestone {
   title: string;
   date: string;
   phase: string;
-  status: "Completed" | "Ongoing" | "Scheduled";
   description: string;
 }
 
 export default function KKNRoadmap() {
   const { t } = useLanguage();
-  const [selectedPhase, setSelectedPhase] = useState<string>("All");
+  const [selectedPhase, setSelectedPhase] = useState<string>("Semua");
   const [activeMilestone, setActiveMilestone] = useState<number | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  
+  
   const phases = [
-    { id: "All", name: "All Phases" },
-    { id: "Preparation", name: "Phase 1: Preparation" },
-    { id: "Readiness", name: "Phase 2: Prep & Readiness" },
-    { id: "Deployment", name: "Phase 3: Field Deployment" },
-    { id: "Completion", name: "Phase 4: Reporting" }
+    { id: "Semua", name: "Semua" },
+    { id: "Administrasi", name: "Administrasi" },
+    { id: "Persiapan", name: "Persiapan" },
+    { id: "Pembekalan", name: "Pembekalan" },
+    { id: "Persiapan Lapangan", name: "Persiapan Lapangan" },
+    { id: "Penerjunan", name: "Penerjunan" },
+    { id: "Pelaksanaan Lapangan", name: "Pelaksanaan Lapangan" },
+    { id: "Evaluasi", name: "Evaluasi" },
+    { id: "Pelaporan", name: "Pelaporan" }
   ];
 
-  const milestones: Milestone[] = [
-    // Phase 1: Preparation
+  const milestones = [
     {
       id: 1,
       title: "Pendaftaran Mahasiswa",
-      date: "7 May – 16 June 2026",
-      phase: "Preparation",
-      status: "Completed",
-      description: "Initial student registration and enrollment period through the official SIM KKN portal."
+      date: "6 Mei - 26 Juni 2026",
+      phase: "Administrasi",
+      description: "Periode pendaftaran mahasiswa melalui sistem resmi KKN."
     },
     {
       id: 2,
       title: "Validasi",
-      date: "17 – 20 June 2026",
-      phase: "Preparation",
-      status: "Completed",
-      description: "Validation of academic eligibility, student administration documents, and registration logs."
+      date: "27 Juni - 3 Juli 2026",
+      phase: "Administrasi",
+      description: "Validasi data mahasiswa dan kelengkapan administrasi peserta KKN."
     },
     {
       id: 3,
       title: "Pembagian Kelompok",
-      date: "22 – 25 June 2026",
-      phase: "Preparation",
-      status: "Completed",
-      description: "Symmetrical algorithm grouping and formation of the active PersyarikatanMu team cohorts."
+      date: "04 Juli 2026",
+      phase: "Persiapan",
+      description: "Pengumuman pembagian kelompok mahasiswa KKN."
     },
     {
       id: 4,
       title: "Pembagian Lokasi + DPL",
-      date: "29 – 30 June 2026",
-      phase: "Preparation",
-      status: "Completed",
-      description: "Geographic assignment of KKN village coordinates and designated supervising lecturers (DPL)."
+      date: "11 Juli 2026",
+      phase: "Persiapan",
+      description: "Pengumuman lokasi KKN dan Dosen Pembimbing Lapangan."
     },
-
-    // Phase 2: Preparation & Readiness
     {
       id: 5,
-      title: "Pembekalan Mahasiswa",
-      date: "1 – 18 July 2026",
-      phase: "Readiness",
-      status: "Ongoing",
-      description: "Extensive student academic briefings, socio-cultural preparation, and team strategy workshops."
+      title: "Pembekalan Materi Khusus Mahasiswa",
+      date: "13 Juli 2026",
+      phase: "Pembekalan",
+      description: "Pembekalan materi khusus bagi mahasiswa peserta KKN."
     },
     {
       id: 6,
-      title: "Pembekalan Teknis Mahasiswa",
-      date: "21 July 2026",
-      phase: "Readiness",
-      status: "Scheduled",
-      description: "Technical workspace deployment briefing, training logs guide, and operational tools orientation."
+      title: "Pembekalan Mahasiswa",
+      date: "14 - 26 Juli 2026",
+      phase: "Pembekalan",
+      description: "Pembekalan umum mahasiswa sebelum pelaksanaan KKN di lapangan."
     },
     {
       id: 7,
       title: "Observasi",
-      date: "1 – 21 July 2026",
-      phase: "Readiness",
-      status: "Ongoing",
-      description: "Field survey coordinates mapping, demographic analysis, and direct identification of local needs."
+      date: "11 - 26 Juli 2026",
+      phase: "Persiapan Lapangan",
+      description: "Observasi lokasi, identifikasi kebutuhan masyarakat, dan pengumpulan data awal."
     },
     {
       id: 8,
       title: "Penyusunan Proposal",
-      date: "1 – 25 July 2026",
-      phase: "Readiness",
-      status: "Ongoing",
-      description: "Compilation of structured program plans, budget proposals, and coordination milestones."
+      date: "11 - 26 Juli 2026",
+      phase: "Persiapan Lapangan",
+      description: "Penyusunan proposal program kerja berdasarkan hasil observasi lapangan."
     },
     {
       id: 9,
       title: "Pembagian Logistik",
-      date: "22 – 24 July 2026",
-      phase: "Readiness",
-      status: "Scheduled",
-      description: "Distribution of tactical group assets, official banners, books, health supplies, and gear."
+      date: "24 - 25 Juli 2026",
+      phase: "Persiapan Lapangan",
+      description: "Pembagian kebutuhan logistik untuk mendukung pelaksanaan KKN."
     },
-
-    // Phase 3: Field Deployment
     {
       id: 10,
       title: "Seremoni Penerjunan",
-      date: "28 July 2026",
-      phase: "Deployment",
-      status: "Scheduled",
-      description: "Official campus send-off ceremony, executive briefings, and deployment flag inauguration."
+      date: "28 Juli 2026",
+      phase: "Penerjunan",
+      description: "Seremoni resmi penerjunan mahasiswa KKN."
     },
     {
       id: 11,
       title: "Penerjunan Lapangan",
-      date: "29 July 2026",
-      phase: "Deployment",
-      status: "Scheduled",
-      description: "Physical team transit to local sub-districts and coordination handover with sub-district heads."
+      date: "29 Juli 2026",
+      phase: "Penerjunan",
+      description: "Mahasiswa mulai diterjunkan ke lokasi KKN masing-masing."
     },
     {
       id: 12,
       title: "Pelaksanaan",
-      date: "29 July – 27 August 2026",
-      phase: "Deployment",
-      status: "Scheduled",
-      description: "Active community execution of academic, digital literacy, financial, and environmental programs."
+      date: "29 Juli - 27 Agustus 2026",
+      phase: "Pelaksanaan Lapangan",
+      description: "Pelaksanaan program kerja dan kegiatan pengabdian masyarakat di lokasi KKN."
     },
     {
       id: 13,
       title: "Monitoring dan Evaluasi Lapangan",
-      date: "10 – 20 August 2026",
-      phase: "Deployment",
-      status: "Scheduled",
-      description: "Supervising lecturer visits, verification audits, and strategic reviews of execution progress."
+      date: "10 - 20 Agustus 2026",
+      phase: "Evaluasi",
+      description: "Monitoring dan evaluasi kegiatan KKN oleh pihak terkait."
     },
     {
       id: 14,
       title: "Penarikan",
-      date: "27 August 2026",
-      phase: "Deployment",
-      status: "Scheduled",
-      description: "Concluding ceremony, physical team extraction, and coordination handover back to campus."
+      date: "27 Agustus 2026",
+      phase: "Penarikan",
+      description: "Penarikan mahasiswa dari lokasi KKN."
     },
-
-    // Phase 4: Reporting & Completion
     {
       id: 15,
       title: "Pengumpulan Laporan dan Nilai Mahasiswa",
-      date: "27 August – 11 September 2026",
-      phase: "Completion",
-      status: "Scheduled",
-      description: "Compilation of complete activity reports, financial logs, and submission of academic scores."
+      date: "27 Agustus - 11 September 2026",
+      phase: "Pelaporan",
+      description: "Pengumpulan laporan akhir dan proses penilaian mahasiswa."
     },
     {
       id: 16,
       title: "Responsi",
-      date: "27 August – 11 September 2026",
-      phase: "Completion",
-      status: "Scheduled",
-      description: "Final academic defense, oral presentations of results, and graduation validation."
+      date: "27 Agustus - 11 September 2026",
+      phase: "Pelaporan",
+      description: "Pelaksanaan responsi dan evaluasi akhir kegiatan KKN."
     }
   ];
 
-  const filteredMilestones = selectedPhase === "All" 
+  const getMilestoneStatus = (dateStr: string) => {
+    const months: Record<string, number> = {
+      "Mei": 4, "Juni": 5, "Juli": 6, "Agustus": 7, "September": 8
+    };
+    const current = new Date(); // Actual system time
+
+    const parseDate = (dStr: string, year: number) => {
+      const parts = dStr.trim().split(" ");
+      const day = parseInt(parts[0], 10);
+      const month = months[parts[1]];
+      return new Date(year, month, day);
+    };
+
+    try {
+      const yearMatch = dateStr.match(/\d{4}$/);
+      const year = yearMatch ? parseInt(yearMatch[0], 10) : new Date().getFullYear();
+      const withoutYear = dateStr.replace(/\d{4}$/, "").trim();
+
+      if (withoutYear.includes("-")) {
+        const parts = withoutYear.split("-");
+        let startStr = parts[0].trim();
+        let endStr = parts[1].trim();
+
+        if (startStr.split(" ").length === 1) {
+            const endMonth = endStr.split(" ")[1];
+            startStr = `${startStr} ${endMonth}`;
+        }
+        
+        const start = parseDate(startStr, year);
+        start.setHours(0,0,0,0);
+        const end = parseDate(endStr, year);
+        end.setHours(23, 59, 59, 999);
+
+        if (current > end) return "Selesai";
+        if (current >= start && current <= end) return "Berjalan";
+        return "Belum Dimulai";
+      } else {
+        const date = parseDate(withoutYear, year);
+        const start = new Date(date);
+        start.setHours(0,0,0,0);
+        const end = new Date(date);
+        end.setHours(23,59,59,999);
+        
+        if (current > end) return "Selesai";
+        if (current >= start && current <= end) return "Berjalan";
+        return "Belum Dimulai";
+      }
+    } catch (e) {
+      return "Belum Dimulai";
+    }
+  };
+
+  const filteredMilestones = selectedPhase === "Semua" 
     ? milestones 
     : milestones.filter(m => m.phase === selectedPhase);
 
-  const getStatusStyle = (status: "Completed" | "Ongoing" | "Scheduled") => {
+  const getStatusStyle = (status: string) => {
     switch (status) {
-      case "Completed":
+      case "Selesai":
         return {
           bg: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
           nodeBg: "bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.7)]",
           nodeBorder: "border-emerald-500/50",
           icon: CheckCircle2
         };
-      case "Ongoing":
+      case "Berjalan":
         return {
           bg: "bg-cyan-500/10 border-cyan-400/30 text-cyan-400",
           nodeBg: "bg-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.9)] animate-pulse",
           nodeBorder: "border-cyan-400",
           icon: PlayCircle
         };
-      case "Scheduled":
+      case "Belum Dimulai":
       default:
         return {
           bg: "bg-slate-500/5 border-white/5 text-slate-500",
@@ -232,10 +266,10 @@ export default function KKNRoadmap() {
               <span>{t("about.roadmap_badge", "KKN ROADMAP")}</span>
             </span>
             <h3 className="text-xl sm:text-2xl font-black tracking-tight text-white uppercase leading-none font-sans bg-gradient-to-r from-cyan-400 via-slate-100 to-indigo-300 bg-clip-text text-transparent">
-              {t("about.roadmap_title", "KKN IMPLEMENTATION TIMELINE 2026")}
+              {t("about.roadmap_title", "TIMELINE PELAKSANAAN KKN 2026")}
             </h3>
             <p className="text-[10px] sm:text-[11px] text-slate-400 font-sans font-medium max-w-2xl leading-relaxed">
-              {t("about.roadmap_desc", "A structured roadmap of the KKN Persyarikatan Muhammadiyah implementation process, covering preparation, field deployment, execution, evaluation, and reporting phases.")}
+              {t("about.roadmap_desc", "Roadmap resmi pelaksanaan KKN PersyarikatanMu 2026, mulai dari pendaftaran, validasi, pembagian kelompok, pembekalan, observasi, pelaksanaan lapangan, hingga pengumpulan laporan dan responsi.")}
             </p>
           </div>
 
@@ -243,15 +277,15 @@ export default function KKNRoadmap() {
           <div className="grid grid-cols-3 gap-3 bg-[#020305]/80 border border-white/5 p-3 rounded-2xl shadow-inner font-mono text-[8px] sm:text-[9px] uppercase tracking-widest shrink-0 self-start xl:self-center">
             <div className="text-left border-r border-white/5 pr-3">
               <span className="block text-slate-500 font-bold leading-none mb-1">START</span>
-              <span className="text-white font-extrabold block">7 MAY 2026</span>
+              <span className="text-white font-extrabold block">6 MEI 2026</span>
             </div>
             <div className="text-center border-r border-white/5 px-3">
-              <span className="block text-cyan-400 font-bold leading-none mb-1">DEPLOYMENT</span>
-              <span className="text-cyan-300 font-extrabold block">29 JULY 2026</span>
+              <span className="block text-cyan-400 font-bold leading-none mb-1">PENERJUNAN</span>
+              <span className="text-cyan-300 font-extrabold block">29 JULI 2026</span>
             </div>
             <div className="text-right pl-3">
-              <span className="block text-slate-500 font-bold leading-none mb-1">COMPLETION</span>
-              <span className="text-white font-extrabold block">11 SEPT 2026</span>
+              <span className="block text-slate-500 font-bold leading-none mb-1">SELESAI</span>
+              <span className="text-white font-extrabold block">11 SEPTEMBER 2026</span>
             </div>
           </div>
         </div>
@@ -288,7 +322,8 @@ export default function KKNRoadmap() {
           >
             <AnimatePresence mode="popLayout">
               {filteredMilestones.map((milestone, idx) => {
-                const style = getStatusStyle(milestone.status);
+                const calculatedStatus = getMilestoneStatus(milestone.date);
+                const style = getStatusStyle(calculatedStatus);
                 const Icon = style.icon;
                 const isHovered = activeMilestone === milestone.id;
 
@@ -338,7 +373,7 @@ export default function KKNRoadmap() {
                           
                           <span className={`inline-flex items-center gap-1 py-0.5 px-2.5 rounded-md text-[7px] font-mono font-extrabold uppercase leading-none border ${style.bg}`}>
                             <Icon className="w-2.5 h-2.5" />
-                            <span>{milestone.status}</span>
+                            <span>{calculatedStatus}</span>
                           </span>
                         </div>
 

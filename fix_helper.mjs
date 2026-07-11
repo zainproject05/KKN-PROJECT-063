@@ -1,4 +1,7 @@
+import fs from 'fs';
+let content = fs.readFileSync('src/utils/attendanceHelper.ts', 'utf-8');
 
+const newHelper = `
 export interface ParsedSession {
   id: string;
   activity_name: string;
@@ -121,12 +124,17 @@ export function serializeRecord(meta: any, userNotes: string): string {
 export function formatDistance(distanceInMeters: number | undefined | null): string {
   if (distanceInMeters === undefined || distanceInMeters === null) return "-";
   if (distanceInMeters < 1000) {
-    return `${Math.round(distanceInMeters)} meter`;
+    return \`\${Math.round(distanceInMeters)} meter\`;
   }
   const km = distanceInMeters / 1000;
-  return `${km.toFixed(2)} km`;
+  return \`\${km.toFixed(2)} km\`;
 }
 
 export function calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   return 0;
 }
+`;
+
+content = newHelper;
+
+fs.writeFileSync('src/utils/attendanceHelper.ts', content);

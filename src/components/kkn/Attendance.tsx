@@ -162,6 +162,97 @@ export default function Attendance() {
     setTimeout(() => setShowSyncIndicator(false), 3000);
   });
 
+  const handlePresentAll = async (session: any) => {
+    if (session.status === "closed") {
+      showToast("Sesi presensi sudah ditutup.", "error");
+      return;
+    }
+    if (!confirm("Yakin ingin menandai semua anggota sebagai Hadir?")) return;
+    try {
+      for (const member of members) {
+        const payload = {
+          attendance_session_id: session.id,
+          member_id: member.id,
+          attendance_status: "present",
+          notes: "Ditandai hadir manual secara massal oleh admin",
+          check_in_at: new Date().toISOString(),
+          attendance_source: "admin_manual_bulk",
+          verification_status: "manual_verified",
+          location_verified: false,
+          selfie_verified: false,
+          photo_verified: false,
+          updated_by_member_id: null
+        };
+        const { error } = await supabase.from("attendance_records").upsert(payload, { onConflict: 'attendance_session_id, member_id' });
+        if (error) {
+           const { data: exist } = await supabase.from("attendance_records")
+             .select("id").eq("attendance_session_id", session.id).eq("member_id", member.id).single();
+           if (exist) {
+             await supabase.from("attendance_records").update(payload).eq("id", exist.id);
+           } else {
+             await supabase.from("attendance_records").insert(payload);
+           }
+        }
+      }
+      showToast("Semua anggota telah ditandai Hadir.");
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal menandai semua anggota.", "error");
+    }
+  };
+
+  const handleResetAll = async (session: any) => {
+    if (!confirm("Yakin ingin mereset semua presensi untuk sesi ini? Ini akan menghapus semua record untuk sesi ini.")) return;
+    try {
+      await supabase
+        .from("attendance_records")
+        .delete()
+        .eq("attendance_session_id", session.id);
+      showToast("Presensi berhasil di-reset.");
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal mereset presensi.", "error");
+    }
+  };
+
+  const handleDeleteSession = async (session: any) => {
+    if (!confirm("Yakin ingin menghapus sesi ini beserta semua presensinya?")) return;
+    try {
+      await supabase.from("attendance_sessions").delete().eq("id", session.id);
+      showToast("Sesi berhasil dihapus.");
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal menghapus sesi.", "error");
+    }
+  };
+
+  const handleCloseSessionNow = async (session: any) => {
+    if (!confirm("Yakin ingin menutup sesi ini sekarang?")) return;
+    try {
+      await supabase.from("attendance_sessions").update({ status: "closed" }).eq("id", session.id);
+      showToast("Sesi berhasil ditutup.");
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal menutup sesi.", "error");
+    }
+  };
+
+  const handleOpenSessionNow = async (session: any) => {
+    if (!confirm("Yakin ingin membuka sesi ini sekarang?")) return;
+    try {
+      await supabase.from("attendance_sessions").update({ status: "open" }).eq("id", session.id);
+      showToast("Sesi berhasil dibuka kembali.");
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal membuka sesi.", "error");
+    }
+  };
+
   const getMemberPhotoUrl = (member: any) => {
     if (member.photo_url && member.photo_url.trim() !== "") {
       return member.photo_url;
@@ -345,346 +436,42 @@ export default function Attendance() {
       return;
     }
 
-    const token = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
-    const startsAt = `${sessionDate}T${startTime}:00+07:00`;
-    const endsAt = `${sessionDate}T${endTime}:00+07:00`;
-
-    const sessionData = {
-      activity_name: activityName.trim(),
-      activity_type: "Program Kerja",
-      date: sessionDate,
-      opens_at: startTime,
-      closes_at: endTime,
-      status: "open",
-      location_name: locationName.trim() || "Posko KKN Kelompok 063",
-      latitude: -7.821008,
-      longitude: 110.370001,
-      gps_posko_input: "",
-      session_token: token,
-      program_id: null,
-      created_by_member_id: activeSubmittedBy,
-      updated_by_member_id: activeSubmittedBy,
-      description: description.trim(),
-      is_public: isPublic,
-      require_gps: requireGps,
-      require_selfie: requireSelfie,
-      require_photo_face_check: requirePhotoFaceCheck,
-      auto_close_enabled: autoCloseEnabled
-    };
-
-    const serializedName = serializeSession(sessionData);
-
-    const payload = {
-      activity_name: serializedName,
-      program_id: null,
-      starts_at: startsAt,
-      ends_at: endsAt,
-      location: locationName.trim() || "Posko KKN Kelompok 063",
-      description: description.trim() || null,
-      created_by_member_id: activeSubmittedBy,
-      updated_by_member_id: activeSubmittedBy,
-      status: "open",
-      activity_type: "Program Kerja",
-      is_public: isPublic,
-      require_gps: requireGps,
-      require_selfie: requireSelfie,
-      require_photo_face_check: requirePhotoFaceCheck,
-      auto_close_enabled: autoCloseEnabled
-    };
-
     try {
-      const { data, error: insErr } = await supabase.from("attendance_sessions").insert([payload]).select();
-      if (insErr) throw insErr;
+      const startsAt = new Date(`${sessionDate}T${startTime}:00+07:00`).toISOString();
+      const endsAt = new Date(`${sessionDate}T${endTime}:00+07:00`).toISOString();
 
-      await supabase.from("activity_logs").insert([{
-        message: `Membuat sesi presensi baru: ${activityName}.`,
-        created_by_member_id: activeSubmittedBy
-      }]);
+      const { data, error: insertError } = await supabase
+        .from("attendance_sessions")
+        .insert([{
+          activity_name: activityName.trim(),
+          starts_at: startsAt,
+          ends_at: endsAt,
+          location: locationName.trim() || "Posko",
+          description: description.trim(),
+          is_public: isPublic,
+          require_gps: requireGps,
+          require_selfie: requireSelfie,
+          require_photo_face_check: true,
+          auto_close_enabled: true,
+          status: "scheduled",
+          created_by_member_id: activeSubmittedBy
+        }])
+        .select()
+        .single();
 
-      // Reset Form fields
-      setActivityName("");
-      setLocationName("");
-      setDescription("");
-      setRelatedProgramId("");
+      if (insertError) throw insertError;
+
+      showToast("Sesi presensi berhasil dibuat.");
       setShowCreateModal(false);
-      showToast("Sesi presensi berhasil dibuat.", "success");
-      audio.playSuccess();
-      
-      // Reload all data
       fetchData();
     } catch (err: any) {
-      setError(err?.message || "Gagal membuat sesi presensi.");
+      console.error("Create session error:", err);
+      setError("Gagal membuat sesi: " + (err.message || "Unknown error"));
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Close Session Now
-  const handleCloseSessionNow = async (session: any) => {
-
-    triggerConfirm(
-      "Tutup Sesi Presensi",
-      "Apakah Anda yakin ingin menutup sesi presensi ini? Sesi yang ditutup tidak dapat diedit lagi.",
-      "danger",
-      async () => {
-        audio.playPrimaryClick();
-
-        try {
-          const { data: dbSess } = await supabase
-            .from("attendance_sessions")
-            .select("*")
-            .eq("id", session.id)
-            .limit(1);
-
-          if (dbSess && dbSess[0]) {
-            const parsed = parseSession(dbSess[0]);
-            parsed.status = "closed";
-            const serializedName = serializeSession(parsed);
-            
-            const { error: updErr } = await supabase
-              .from("attendance_sessions")
-              .update({ 
-                activity_name: serializedName, 
-                status: "closed",
-                updated_at: new Date().toISOString(),
-                closed_at: new Date().toISOString()
-              })
-              .eq("id", session.id);
-
-            if (updErr) throw updErr;
-          }
-
-          await supabase.from("activity_logs").insert([{
-            message: `Menutup sesi presensi secara manual: ${session.activity_name}`
-          }]);
-
-          showToast("Sesi presensi berhasil ditutup.", "success");
-          fetchData();
-        } catch (err: any) {
-          console.error(err);
-          showToast("Gagal menutup sesi presensi.", "error");
-        }
-      }
-    );
-  };
-
-  // Open Sesi Now (for scheduled sessions)
-  const handleOpenSessionNow = async (session: any) => {
-
-    audio.playPrimaryClick();
-
-    try {
-      const { data: dbSess } = await supabase
-        .from("attendance_sessions")
-        .select("*")
-        .eq("id", session.id)
-        .limit(1);
-
-      if (dbSess && dbSess[0]) {
-        const parsed = parseSession(dbSess[0]);
-        parsed.status = "open";
-        const serializedName = serializeSession(parsed);
-        
-        const { error: updErr } = await supabase
-          .from("attendance_sessions")
-          .update({ 
-            activity_name: serializedName, 
-            status: "open",
-            updated_at: new Date().toISOString()
-          })
-          .eq("id", session.id);
-
-        if (updErr) throw updErr;
-      }
-
-      await supabase.from("activity_logs").insert([{
-        message: `Membuka sesi presensi secara manual: ${session.activity_name}`
-      }]);
-
-      showToast("Sesi presensi berhasil dibuka dan aktif.", "success");
-      fetchData();
-    } catch (err: any) {
-      showToast(`Gagal membuka sesi: ${err.message || "Kesalahan server"}`, "error");
-    }
-  };
-
-  // Hadirkan Semua (Bulk Attendance Upgrade)
-  const handlePresentAll = async (session: any) => {
-
-    if (session.status === "closed") {
-      showToast("Sesi presensi sudah ditutup.", "error");
-      return;
-    }
-
-    const executePresentAll = async () => {
-      // Optimistic UI updates
-      const optimisticRecords = members.map(m => {
-        const existing = records.find(r => r.member_id === m.id);
-        return {
-          id: existing?.id || `temp-${m.id}`,
-          member_id: m.id,
-          session_id: session.id,
-          status: "present",
-          notes: "Hadir Semua",
-          check_in_at: existing?.check_in_at || new Date().toISOString(),
-          source: "admin_manual_bulk"
-        };
-      });
-
-      setRecords(optimisticRecords);
-      showToast("Semua anggota aktif berhasil ditandai hadir.", "success");
-      audio.playSuccess();
-
-      try {
-        const promises = members.map(async (m) => {
-          const existing = records.find(r => r.member_id === m.id);
-          const recordData = {
-            session_id: session.id,
-            member_id: m.id,
-            status: "present",
-            manual_override: true,
-            manual_override_reason: "Hadir Semua via Koordinator",
-            check_in_at: existing?.check_in_at || new Date().toISOString(),
-            notes: "Hadir Semua",
-            source: "admin_manual_bulk"
-          };
-          const serializedNotes = serializeRecord(recordData, "Hadir Semua");
-
-          if (existing) {
-            return supabase
-              .from("attendance_records")
-              .update({
-                attendance_status: "present",
-                notes: serializedNotes,
-                updated_at: new Date().toISOString()
-              })
-              .eq("id", existing.id);
-          } else {
-            return supabase
-              .from("attendance_records")
-              .insert([{
-                attendance_session_id: session.id,
-                member_id: m.id,
-                attendance_status: "present",
-                notes: serializedNotes
-              }]);
-          }
-        });
-
-        await Promise.all(promises);
-
-        await supabase.from("activity_logs").insert([{
-          message: `Mepresensi seluruh anggota aktif untuk sesi: ${session.activity_name}`
-        }]);
-
-        fetchSessionRecords(session.id);
-      } catch (err: any) {
-        console.error(err);
-        showToast("Terjadi kesalahan saat menghadirkan semua anggota.", "error");
-      }
-    };
-
-    triggerConfirm(
-      "Hadirkan Semua Anggota",
-      "Yakin ingin menandai semua anggota sebagai Hadir?",
-      "warning",
-      executePresentAll
-    );
-  };
-
-  // Reset Semua Presensi
-  const handleResetAll = async (session: any) => {
-
-    triggerConfirm(
-      "Reset Semua Presensi",
-      "Apakah Anda yakin ingin menghapus semua rekam kehadiran pada sesi ini?",
-      "warning",
-      async () => {
-        setRecords([]);
-        showToast("Seluruh data presensi sesi berhasil direset.", "warning");
-        audio.playSecondaryClick();
-
-        try {
-          const { error: delErr } = await supabase
-            .from("attendance_records")
-            .delete()
-            .eq("attendance_session_id", session.id);
-
-          if (delErr) throw delErr;
-
-          await supabase.from("activity_logs").insert([{
-            message: `Mereset seluruh catatan presensi untuk sesi: ${session.activity_name}`
-          }]);
-
-          fetchSessionRecords(session.id);
-        } catch (err: any) {
-          console.error(err);
-          showToast("Gagal meriset data presensi.", "error");
-        }
-      }
-    );
-  };
-
-  // Hapus Sesi
-  const handleDeleteSession = async (session: any) => {
-
-    triggerConfirm(
-      "Hapus Sesi Presensi",
-      "Apakah Anda yakin ingin menghapus sesi presensi ini? Sesi beserta seluruh data di dalamnya akan dihapus secara permanen.",
-      "danger",
-      async () => {
-        showToast("Sesi presensi beserta seluruh datanya berhasil dihapus.", "error");
-        audio.playPrimaryClick();
-
-        try {
-          await supabase
-            .from("attendance_records")
-            .delete()
-            .eq("attendance_session_id", session.id);
-
-          const { error: delErr } = await supabase
-            .from("attendance_sessions")
-            .delete()
-            .eq("id", session.id);
-
-          if (delErr) throw delErr;
-
-          await supabase.from("activity_logs").insert([{
-            message: `Menghapus sesi presensi: ${session.activity_name}`
-          }]);
-
-          const remainingSessions = sessions.filter(s => s.id !== session.id);
-          setSessions(remainingSessions);
-          if (remainingSessions.length > 0) {
-            setSelectedSession(remainingSessions[0]);
-            fetchSessionRecords(remainingSessions[0].id);
-          } else {
-            setSelectedSession(null);
-            setRecords([]);
-          }
-          
-          fetchData();
-        } catch (err: any) {
-          console.error(err);
-          showToast("Gagal menghapus sesi presensi.", "error");
-        }
-      }
-    );
-  };
-
-  // View Recap & Scroll Smoothly
-  const handleViewRecap = (session: any) => {
-    audio.playSecondaryClick();
-    setIsRecapExpanded(true);
-    setTimeout(() => {
-      const el = document.getElementById("attendance-recap-section");
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }, 150);
-  };
-
-  // Update Individual Member Status
   const handleUpdateStatus = async (session: any, memberId: string, newStatus: string) => {
 
     if (session.status === "closed") {
@@ -1075,9 +862,9 @@ export default function Attendance() {
                             <tbody>
                               {members.map((member) => {
                                 const rec = sessionRecords.find(r => r.member_id === member.id);
-                                const isSessionActive = true;
+                                const isSessionActive = session.status === "open";
                                 let indStatus = "Alfa";
-                                if (rec) { indStatus = REV_STATUS_MAP[rec.status] || "Hadir"; } else if (isSessionActive) { indStatus = "Belum Absen"; }
+                                if (rec) { indStatus = REV_STATUS_MAP[rec.attendance_status] || "Hadir"; } else if (isSessionActive) { indStatus = "Belum Absen"; }
                                 
                                 return (
                                   <tr key={member.id} className="border-b border-white/[0.02] hover:bg-white/[0.01] transition-colors group">
@@ -1112,11 +899,11 @@ export default function Attendance() {
                                             <div className="flex items-center gap-1">
                                               <a href={`https://www.google.com/maps?q=${rec.latitude},${rec.longitude}`} target="_blank" rel="noreferrer" title={`Buka Maps (Akurasi: ±${Math.round(rec.gps_accuracy_meters || 0)}m)`} className="w-7 h-7 bg-white/5 hover:bg-white/10 rounded border border-white/5 hover:border-cyan-500/30 flex items-center justify-center transition-colors group/btn relative"><MapPin className="w-3.5 h-3.5 text-cyan-400" /></a>
                                             </div>
-                                          ) : (<span className="text-[9px] text-slate-600 flex items-center gap-1 font-mono"><MapPin className="w-3 h-3 opacity-30" /> -</span>)}
+                                          ) : (<span className="text-[9px] text-slate-600 flex items-center gap-1 font-mono"><MapPin className="w-3 h-3 opacity-30" /> No GPS</span>)}
                                           
-                                          {rec?.photo_path ? (
-                                            <button onClick={() => { window.open(supabase.storage.from("attendance_photos").getPublicUrl(rec.photo_path).data.publicUrl, "_blank"); }} title="Lihat Foto Wajah" className="w-7 h-7 bg-white/5 hover:bg-white/10 rounded border border-white/5 hover:border-cyan-500/30 flex items-center justify-center transition-colors"><Camera className="w-3.5 h-3.5 text-emerald-400" /></button>
-                                          ) : (<span className="text-[9px] text-slate-600 flex items-center gap-1 font-mono"><Camera className="w-3 h-3 opacity-30" /> -</span>)}
+                                          {rec?.selfie_path ? (
+                                            <button onClick={() => { window.open(supabase.storage.from("attendance-selfies").getPublicUrl(rec.photo_path).data.publicUrl, "_blank"); }} title="Lihat Foto Wajah" className="w-7 h-7 bg-white/5 hover:bg-white/10 rounded border border-white/5 hover:border-cyan-500/30 flex items-center justify-center transition-colors"><Camera className="w-3.5 h-3.5 text-emerald-400" /></button>
+                                          ) : (<span className="text-[9px] text-slate-600 flex items-center gap-1 font-mono"><Camera className="w-3 h-3 opacity-30" /> No Photo</span>)}
                                         </div>
                                       </div>
                                     </td>
@@ -1129,7 +916,7 @@ export default function Attendance() {
                                           <option value="Izin">Izin</option>
                                           <option value="Sakit">Sakit</option>
                                           <option value="Alfa">Alfa</option>
-                                          <option value="Belum Absen" disabled>Belum</option>
+                                          <option value="Belum Absen">Belum Absen</option>
                                         </select>
                                       </div>
                                     </td>

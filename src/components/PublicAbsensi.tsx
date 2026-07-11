@@ -38,6 +38,13 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const closeExpiredSessions = async () => {
+    try {
+      await supabase.rpc("close_expired_attendance_sessions");
+    } catch (e) {
+      console.error("RPC Error:", e);
+    }
+  };
   const [successData, setSuccessData] = useState<any>(null);
   
   const [toast, setToast] = useState<{title: string, message: string, type: 'success' | 'error' | 'warning'} | null>(null);
@@ -58,13 +65,12 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
   const fetchSessions = async () => {
     try {
       const { data, error } = await supabase
-        .from("attendance_sessions")
+        .from("public_attendance_sessions")
         .select("*")
-        .eq("status", "open")
-        .order("created_at", { ascending: false });
+        .order("starts_at", { ascending: true });
         
       if (error) {
-        console.error("Failed to fetch sessions directly:", error.message);
+        console.error("Failed to fetch public sessions:", error.message);
         return;
       }
         
@@ -76,45 +82,26 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
         }
       }
     } catch (e) {
-      console.error(e);
+      console.error("Session load crash:", e);
     }
   };
 
   const fetchMembers = async () => {
     try {
       const { data, error } = await supabase
-        .from("members")
-        .select("id, full_name, nim, photo_url, photo_path")
-        .eq("is_active", true)
+        .from("public_attendance_members")
+        .select("*")
         .order("full_name", { ascending: true });
-        
       if (error) {
-        console.error("Failed to fetch members directly:", error.message);
+        console.error("Failed to fetch public attendance members:", error.message);
         return;
       }
-        
-      if (data) {
-        setMembers(data);
-      }
+      setMembers(data || []);
     } catch (e) {
       console.error(e);
     }
   };
-  
-  const closeExpiredSessions = async () => {
-    try {
-      const { error } = await supabase.rpc("close_expired_attendance_sessions");
-      if (error) {
-        console.warn("Could not run close_expired_attendance_sessions:", error.message);
-      }
-    } catch (e) {
-      console.error("RPC close_expired_attendance_sessions error:", e);
-    }
-    // Always call fetchSessions to ensure data is populated
-    fetchSessions();
-  };
 
-  // Close dropdown on click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {

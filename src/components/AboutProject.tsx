@@ -3,9 +3,9 @@ import {
   GraduationCap, Award, ShieldCheck, Landmark, 
   MapPin, MessageSquare, Github, Instagram, Globe, BookOpen,
   Navigation, Star, ExternalLink, Heart, Shield, Workflow, Info
-} from "lucide-react";
+, Phone, Users, Copy} from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { Map, MapMarker, MarkerContent, MarkerLabel, MarkerPopup, MapControls } from "./ui/mapcn-marker-popup";
+import { Map, MapMarker, MarkerContent, MarkerLabel, MarkerPopup, MapControls, MapRoute } from "./ui/mapcn-marker-popup";
 import { SectionHeader } from "./ui/SectionHeader";
 import { useLanguage } from "../context/LanguageContext";
 import { audio } from "../utils/audioService";
@@ -15,9 +15,36 @@ import KKNRoadmap from "./KKNRoadmap";
 export default function AboutProject() {
   const { language, t } = useLanguage();
   const [subTab, setSubTab] = useState<"about" | "workflow" | "ethics">("about");
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
   
   // Precise coordinate of Gedung G6 Teknik Mesin UMY (Leader's Coordinate / Base camp)
-  const umyCoords = { lng: 110.3203470953695, lat: -7.80790378741042 };
+  
+  const klampokCoords = { lng: 110.4067402502076, lat: -8.034789215438893 };
+  const umyCoords = { lng: 110.320347, lat: -7.807904 };
+  
+  const routeCoords: [number, number][] = [
+    [110.320347, -7.807904], // UMY
+    [110.329800, -7.887900], // Bantul
+    [110.334000, -7.950000], // South Bantul
+    [110.322800, -8.016300], // Parangtritis area
+    [110.380000, -8.025000], // Purwosari approach
+    [110.406740, -8.034789]  // Klampok
+  ];
+
+  const boundaryCoords: [number, number][] = [
+    [110.398, -8.025],
+    [110.415, -8.022],
+    [110.418, -8.045],
+    [110.400, -8.048],
+    [110.395, -8.035],
+    [110.398, -8.025] // close loop
+  ];
+
 
   const handleSubTabChange = (targetTab: "about" | "workflow" | "ethics") => {
     audio.playTabSwitch();
@@ -404,18 +431,18 @@ export default function AboutProject() {
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-400"></span>
                         </span>
-                        <span>{t("about.map_title", "SUPERVISING CAMPUS COORDINATE HD SATELLITE MAP")}</span>
+                        <span>{t("about.map_title", "KKN LOCATION COORDINATE HD SATELLITE MAP")}</span>
                       </h4>
                       <span className="text-[8.5px] font-mono font-black text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-md uppercase tracking-wider">
-                        GEDUNG G6 TEKNIK MESIN UMY
+                        LOKASI KKN GROUP 063
                       </span>
                     </div>
                     
                     {/* Massive Satellite Map View */}
                     <div className="w-full h-[410px] rounded-2.5xl overflow-hidden border border-white/15 shadow-[inset_4px_4px_12px_rgba(0,0,0,0.95),0_10px_40px_rgba(0,0,0,0.85)] relative bg-[#010103]">
                       <Map 
-                        center={[umyCoords.lng, umyCoords.lat]} 
-                        zoom={15.0} 
+                        center={[klampokCoords.lng, klampokCoords.lat]} 
+                        zoom={14.0} 
                         pitch={0}
                         bearing={0}
                         className="w-full h-full"
@@ -468,49 +495,49 @@ export default function AboutProject() {
                       >
                         <MapControls showZoom={true} showLocate={true} showFullscreen={true} position="top-right" />
                         
-                        <MapMarker longitude={umyCoords.lng} latitude={umyCoords.lat}>
+                        <MapMarker longitude={klampokCoords.lng} latitude={klampokCoords.lat}>
                           <MarkerContent>
                             <div className="relative flex h-8 w-8 items-center justify-center">
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
                               <span className="relative inline-flex rounded-full h-4 w-4 bg-cyan-400 border-2 border-white shadow-[0_0_15px_rgba(34,211,238,0.9)]"></span>
                             </div>
                             <MarkerLabel position="bottom" className="text-white font-black bg-slate-950/95 py-1 px-2.5 rounded-lg border border-white/10 text-[9px] font-mono uppercase tracking-widest whitespace-nowrap shadow-xl mt-1.5">
-                              {t("about.map_label", "Gedung G6 Teknik Mesin UMY")}
+                              {t("about.map_label", "LOKASI KKN GROUP 063")}
                             </MarkerLabel>
                           </MarkerContent>
                           
-                          <MarkerPopup className="w-64 p-0 border border-white/10 bg-slate-950/98 backdrop-blur-xl overflow-hidden rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] text-left select-none">
+                          <MarkerPopup className="w-64 p-0 border border-white/5 bg-[#0a0c10]/95 backdrop-blur-2xl overflow-hidden rounded-2xl shadow-[10px_10px_24px_rgba(0,0,0,0.95),-4px_-4px_16px_rgba(255,255,255,0.03)] text-left select-none ring-1 ring-white/5">
                             <div className="relative h-28 overflow-hidden">
                               <img 
-                                src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=320&h=180&fit=crop" 
-                                alt="Mechanical Lab G6" 
+                                src="https://images.unsplash.com/photo-1529156069898-49953eb1b5b4?w=320&h=180&fit=crop" 
+                                alt="KKN Group 063" 
                                 className="h-full w-full object-cover filter brightness-[80%] scale-102 hover:scale-105 transition-all duration-700"
                               />
                               <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-black/35" />
                               <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 bg-slate-950/80 backdrop-blur-md text-cyan-400 text-[8px] font-mono px-2 py-0.5 rounded-full font-black tracking-widest uppercase border border-white/5 shadow-md">
                                 <span className="w-1 h-1 rounded-full bg-cyan-400 animate-pulse" />
-                                <span>BUILDING G6</span>
+                                <span>KKN GROUP 063</span>
                               </div>
                             </div>
-                            <div className="p-3.5 space-y-2.5 text-left bg-gradient-to-b from-slate-950/30 to-slate-950/95 relative z-10">
+                            <div className="p-4 space-y-3 text-left bg-gradient-to-b from-[#0a0c10]/50 to-[#050608]/98 relative z-10">
                               <div className="space-y-0.5">
-                                <h4 className="text-white text-[11px] font-black leading-snug uppercase tracking-wider">{t("about.map_label", "Gedung G6 Teknik Mesin")}</h4>
-                                <p className="text-[9px] text-slate-400 leading-normal font-medium font-sans">Civil & Mechanical Engineering, FT-UMY</p>
+                                <h4 className="text-white text-[11px] font-black leading-snug uppercase tracking-wider">{t("about.map_label", "LOKASI KKN GROUP 063")}</h4>
+                                <p className="text-[9px] text-slate-400 leading-normal font-medium font-sans">Giripurwo, Purwosari, Gunungkidul</p>
                               </div>
                               
                               <div className="flex items-center gap-1 text-[8.5px] font-mono font-bold tracking-wider text-cyan-400 bg-cyan-500/5 border border-cyan-400/10 px-2 py-0.5 w-max rounded">
                                 <Star className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />
                                 <span>5.0</span>
-                                <span className="text-slate-400 uppercase">(CORE RESEARCH)</span>
+                                <span className="text-slate-400 uppercase">(LOKASI KKN)</span>
                               </div>
                               
                               <div className="pt-1">
                                 <a 
-                                  href="https://maps.app.goo.gl/rxYG5GPaj8AezbNa7"
+                                  href="https://maps.app.goo.gl/CU7PhaYKFmLZMr1V7"
                                   target="_blank"
                                   rel="noreferrer"
                                   onClick={() => audio.playClick()}
-                                  className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-xl bg-cyan-400 px-3 text-[9px] font-bold text-slate-950 hover:bg-cyan-300 transition-all cursor-pointer shadow-[0_4px_12px_rgba(34,211,238,0.2)] uppercase tracking-wider active:scale-[0.98]"
+                                  className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-br from-cyan-400 to-cyan-500 px-3 text-[9px] font-bold text-slate-950 hover:from-cyan-300 hover:to-cyan-400 transition-all cursor-pointer shadow-[4px_4px_10px_rgba(0,0,0,0.5),inset_1px_1px_2px_rgba(255,255,255,0.4)] uppercase tracking-wider active:scale-[0.98] border border-cyan-300/20"
                                 >
                                   <Navigation className="w-2.5 h-2.5 fill-current" />
                                   <span>{t("about.directions", "GET DIRECTIONS")}</span>
@@ -525,9 +552,9 @@ export default function AboutProject() {
 
                   {/* Geographic Coordination metadata footer */}
                   <div className="flex items-center justify-between text-[9px] font-mono text-slate-500 mt-4.5 pt-3.5 border-t border-white/5">
-                    <span className="font-bold tracking-wider">COORDS -7.807904, 110.320347 | GEDUNG G6 TEKNIK MESIN UMY</span>
+                    <span className="font-bold tracking-wider">COORDS -8.034789, 110.406740 | LOKASI KKN GROUP 063, GIRIPURWO</span>
                     <a 
-                      href="https://maps.app.goo.gl/rxYG5GPaj8AezbNa7" 
+                      href="https://maps.app.goo.gl/CU7PhaYKFmLZMr1V7" 
                       target="_blank"  
                       rel="noreferrer"
                       className="text-cyan-400 font-extrabold hover:underline flex items-center space-x-1 uppercase"
@@ -535,6 +562,110 @@ export default function AboutProject() {
                       <span>{t("about.maps_link", "Google Maps Direct")}</span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
+                  </div>
+
+                </div>
+              </motion.div>
+
+              
+              {/* Row 2.5: KKN Location & Field Coordination */}
+              <motion.div variants={staggerChildVariants} className="w-full">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  
+                  {/* Location Card */}
+                  <div className="relative rounded-3xl bg-gradient-to-b from-[#090b16]/95 to-[#04050a]/98 border border-white/10 p-6.5 shadow-[12px_12px_36px_rgba(0,0,0,0.95)] overflow-hidden text-left flex flex-col justify-between group hover:border-cyan-500/20 transition-all duration-300">
+                    <div>
+                      <h4 className="font-mono text-[10.5px] font-black text-slate-300 uppercase tracking-widest flex items-center space-x-2 pb-3 border-b border-white/5 mb-4">
+                        <MapPin className="w-4 h-4 text-cyan-400" />
+                        <span>Lokasi KKN</span>
+                      </h4>
+                      <div className="space-y-1 text-sm font-semibold text-white mb-6">
+                        <p>Padukuhan Klampok</p>
+                        <p>Kalurahan Giripurwo</p>
+                        <p>Kapanewon Purwosari</p>
+                        <p>Kabupaten Gunungkidul</p>
+                        <p className="text-slate-400 text-xs mt-1">Daerah Istimewa Yogyakarta</p>
+                      </div>
+                    </div>
+                    <a 
+                      href="https://maps.app.goo.gl/CU7PhaYKFmLZMr1V7"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-bold text-xs uppercase tracking-wider text-center hover:bg-cyan-500/20 hover:border-cyan-500/40 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                    >
+                      <Navigation className="w-3.5 h-3.5" />
+                      Buka Maps
+                    </a>
+                  </div>
+
+                  {/* PRM Contact Card */}
+                  <div className="relative rounded-3xl bg-gradient-to-b from-[#090b16]/95 to-[#04050a]/98 border border-white/10 p-6.5 shadow-[12px_12px_36px_rgba(0,0,0,0.95)] overflow-hidden text-left flex flex-col justify-between group hover:border-emerald-500/20 transition-all duration-300">
+                    <div>
+                      <h4 className="font-mono text-[10.5px] font-black text-slate-300 uppercase tracking-widest flex items-center space-x-2 pb-3 border-b border-white/5 mb-4">
+                        <Phone className="w-4 h-4 text-emerald-400" />
+                        <span>Kontak PRM</span>
+                      </h4>
+                      <div className="mb-6">
+                        <p className="text-xl font-bold text-white">Bapak Riyono</p>
+                        <p className="text-slate-400 font-mono mt-1 text-sm">0851-0457-2666</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2.5">
+                      <button 
+                        onClick={() => {
+                          const text = `Assalamu'alaikum Bapak Riyono.\n\nMohon izin, kami perwakilan dari kelompok KKN PersyarikatanMu-063 yang akan melaksanakan kegiatan KKN di Padukuhan Klampok, Kalurahan Giripurwo, Kapanewon Purwosari, Kabupaten Gunungkidul.\n\nIzin menghubungi Bapak untuk koordinasi awal terkait lokasi, kegiatan, dan kebutuhan masyarakat setempat.\n\nTerima kasih, Pak.\nWassalamu'alaikum warahmatullahi wabarakatuh.`;
+                          navigator.clipboard.writeText(text).then(() => showToast("Template chat berhasil disalin.")).catch(() => showToast("Gagal menyalin template."));
+                        }}
+                        className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 font-bold text-xs uppercase tracking-wider text-center hover:bg-white/10 hover:border-white/20 hover:text-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        Salin Template Chat
+                      </button>
+                      <a 
+                        href="https://wa.me/6285104572666?text=Assalamu%E2%80%99alaikum%20Bapak%20Riyono.%0A%0AMohon%20izin%2C%20kami%20perwakilan%20dari%20kelompok%20KKN%20PersyarikatanMu-063%20yang%20akan%20melaksanakan%20kegiatan%20KKN%20di%20Padukuhan%20Klampok%2C%20Kalurahan%20Giripurwo%2C%20Kapanewon%20Purwosari%2C%20Kabupaten%20Gunungkidul.%0A%0AIzin%20menghubungi%20Bapak%20untuk%20koordinasi%20awal%20terkait%20lokasi%2C%20kegiatan%2C%20dan%20kebutuhan%20masyarakat%20setempat.%0A%0ATerima%20kasih%2C%20Pak.%0AWassalamu%E2%80%99alaikum%20warahmatullahi%20wabarakatuh."
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs uppercase tracking-wider text-center hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 360 362" className="w-3.5 h-3.5"><path fill="#25D366" fillRule="evenodd" d="M307.546 52.566C273.709 18.684 228.706.017 180.756 0 81.951 0 1.538 80.404 1.504 179.235c-.017 31.594 8.242 62.432 23.928 89.609L0 361.736l95.024-24.925c26.179 14.285 55.659 21.805 85.655 21.814h.077c98.788 0 179.21-80.413 179.244-179.244.017-47.898-18.608-92.926-52.454-126.807v-.008Zm-126.79 275.788h-.06c-26.73-.008-52.952-7.194-75.831-20.765l-5.44-3.231-56.391 14.791 15.05-54.981-3.542-5.638c-14.912-23.721-22.793-51.139-22.776-79.286.035-82.14 66.867-148.973 149.051-148.973 39.793.017 77.198 15.53 105.328 43.695 28.131 28.157 43.61 65.596 43.593 105.398-.035 82.149-66.867 148.982-148.982 148.982v.008Zm81.719-111.577c-4.478-2.243-26.497-13.073-30.606-14.568-4.108-1.496-7.09-2.243-10.073 2.243-2.982 4.487-11.568 14.577-14.181 17.559-2.613 2.991-5.226 3.361-9.704 1.117-4.477-2.243-18.908-6.97-36.02-22.226-13.313-11.878-22.304-26.54-24.916-31.027-2.613-4.486-.275-6.91 1.959-9.136 2.011-2.011 4.478-5.234 6.721-7.847 2.244-2.613 2.983-4.486 4.478-7.469 1.496-2.991.748-5.603-.369-7.847-1.118-2.243-10.073-24.289-13.812-33.253-3.636-8.732-7.331-7.546-10.073-7.692-2.613-.13-5.595-.155-8.586-.155-2.991 0-7.839 1.118-11.947 5.604-4.108 4.486-15.677 15.324-15.677 37.361s16.047 43.344 18.29 46.335c2.243 2.991 31.585 48.225 76.51 67.632 10.684 4.615 19.029 7.374 25.535 9.437 10.727 3.412 20.49 2.931 28.208 1.779 8.604-1.289 26.498-10.838 30.228-21.298 3.73-10.46 3.73-19.433 2.613-21.298-1.117-1.865-4.108-2.991-8.586-5.234l.008-.017Z" clipRule="evenodd"/></svg>
+                        Hubungi via WhatsApp
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* DPL Contact Card */}
+                  <div className="relative rounded-3xl bg-gradient-to-b from-[#090b16]/95 to-[#04050a]/98 border border-white/10 p-6.5 shadow-[12px_12px_36px_rgba(0,0,0,0.95)] overflow-hidden text-left flex flex-col justify-between group hover:border-indigo-500/20 transition-all duration-300">
+                    <div>
+                      <h4 className="font-mono text-[10.5px] font-black text-slate-300 uppercase tracking-widest flex items-center space-x-2 pb-3 border-b border-white/5 mb-4">
+                        <Users className="w-4 h-4 text-indigo-400" />
+                        <span>Dosen Pembimbing Lapangan</span>
+                      </h4>
+                      <div className="mb-6">
+                        <p className="text-[15px] font-bold text-white">Sunarmo, S.H., M.Hum., Ph.D.</p>
+                        <p className="text-slate-400 font-mono mt-1 text-sm">0815-6852-068</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2.5">
+                      <button 
+                        onClick={() => {
+                          const text = `Assalamu'alaikum Bapak Sunarmo, S.H., M.Hum., Ph.D.\n\nMohon izin, kami perwakilan dari kelompok KKN PersyarikatanMu-063 yang berlokasi di Padukuhan Klampok, Kalurahan Giripurwo, Kapanewon Purwosari, Kabupaten Gunungkidul.\n\nIzin menghubungi Bapak terkait koordinasi kegiatan KKN dan arahan pelaksanaan program kerja kelompok kami.\n\nTerima kasih, Pak.\nWassalamu'alaikum warahmatullahi wabarakatuh.`;
+                          navigator.clipboard.writeText(text).then(() => showToast("Template chat berhasil disalin.")).catch(() => showToast("Gagal menyalin template."));
+                        }}
+                        className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 font-bold text-xs uppercase tracking-wider text-center hover:bg-white/10 hover:border-white/20 hover:text-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        Salin Template Chat
+                      </button>
+                      <a 
+                        href="https://wa.me/628156852068?text=Assalamu%E2%80%99alaikum%20Bapak%20Sunarmo%2C%20S.H.%2C%20M.Hum.%2C%20Ph.D.%0A%0AMohon%20izin%2C%20kami%20perwakilan%20dari%20kelompok%20KKN%20PersyarikatanMu-063%20yang%20berlokasi%20di%20Padukuhan%20Klampok%2C%20Kalurahan%20Giripurwo%2C%20Kapanewon%20Purwosari%2C%20Kabupaten%20Gunungkidul.%0A%0AIzin%20menghubungi%20Bapak%20terkait%20koordinasi%20kegiatan%20KKN%20dan%20arahan%20pelaksanaan%20program%20kerja%20kelompok%20kami.%0A%0ATerima%20kasih%2C%20Pak.%0AWassalamu%E2%80%99alaikum%20warahmatullahi%20wabarakatuh."
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-bold text-xs uppercase tracking-wider text-center hover:bg-indigo-500/20 hover:border-indigo-500/40 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 360 362" className="w-3.5 h-3.5"><path fill="#25D366" fillRule="evenodd" d="M307.546 52.566C273.709 18.684 228.706.017 180.756 0 81.951 0 1.538 80.404 1.504 179.235c-.017 31.594 8.242 62.432 23.928 89.609L0 361.736l95.024-24.925c26.179 14.285 55.659 21.805 85.655 21.814h.077c98.788 0 179.21-80.413 179.244-179.244.017-47.898-18.608-92.926-52.454-126.807v-.008Zm-126.79 275.788h-.06c-26.73-.008-52.952-7.194-75.831-20.765l-5.44-3.231-56.391 14.791 15.05-54.981-3.542-5.638c-14.912-23.721-22.793-51.139-22.776-79.286.035-82.14 66.867-148.973 149.051-148.973 39.793.017 77.198 15.53 105.328 43.695 28.131 28.157 43.61 65.596 43.593 105.398-.035 82.149-66.867 148.982-148.982 148.982v.008Zm81.719-111.577c-4.478-2.243-26.497-13.073-30.606-14.568-4.108-1.496-7.09-2.243-10.073 2.243-2.982 4.487-11.568 14.577-14.181 17.559-2.613 2.991-5.226 3.361-9.704 1.117-4.477-2.243-18.908-6.97-36.02-22.226-13.313-11.878-22.304-26.54-24.916-31.027-2.613-4.486-.275-6.91 1.959-9.136 2.011-2.011 4.478-5.234 6.721-7.847 2.244-2.613 2.983-4.486 4.478-7.469 1.496-2.991.748-5.603-.369-7.847-1.118-2.243-10.073-24.289-13.812-33.253-3.636-8.732-7.331-7.546-10.073-7.692-2.613-.13-5.595-.155-8.586-.155-2.991 0-7.839 1.118-11.947 5.604-4.108 4.486-15.677 15.324-15.677 37.361s16.047 43.344 18.29 46.335c2.243 2.991 31.585 48.225 76.51 67.632 10.684 4.615 19.029 7.374 25.535 9.437 10.727 3.412 20.49 2.931 28.208 1.779 8.604-1.289 26.498-10.838 30.228-21.298 3.73-10.46 3.73-19.433 2.613-21.298-1.117-1.865-4.108-2.991-8.586-5.234l.008-.017Z" clipRule="evenodd"/></svg>
+                        Hubungi via WhatsApp
+                      </a>
+                    </div>
                   </div>
 
                 </div>
@@ -567,7 +698,7 @@ export default function AboutProject() {
                       rel="noreferrer"
                       className="p-3 rounded-2xl bg-[#030409]/85 border border-emerald-500/20 hover:border-emerald-500/50 hover:bg-emerald-500/10 flex flex-col items-center justify-center text-emerald-400 transition-all duration-300 text-center gap-1.5 cursor-pointer hover:-translate-y-[2px] shadow-[4px_4px_12px_rgba(0,0,0,0.5)]"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 360 362" className="w-5 h-5"><path fill="#25D366" fill-rule="evenodd" d="M307.546 52.566C273.709 18.684 228.706.017 180.756 0 81.951 0 1.538 80.404 1.504 179.235c-.017 31.594 8.242 62.432 23.928 89.609L0 361.736l95.024-24.925c26.179 14.285 55.659 21.805 85.655 21.814h.077c98.788 0 179.21-80.413 179.244-179.244.017-47.898-18.608-92.926-52.454-126.807v-.008Zm-126.79 275.788h-.06c-26.73-.008-52.952-7.194-75.831-20.765l-5.44-3.231-56.391 14.791 15.05-54.981-3.542-5.638c-14.912-23.721-22.793-51.139-22.776-79.286.035-82.14 66.867-148.973 149.051-148.973 39.793.017 77.198 15.53 105.328 43.695 28.131 28.157 43.61 65.596 43.593 105.398-.035 82.149-66.867 148.982-148.982 148.982v.008Zm81.719-111.577c-4.478-2.243-26.497-13.073-30.606-14.568-4.108-1.496-7.09-2.243-10.073 2.243-2.982 4.487-11.568 14.577-14.181 17.559-2.613 2.991-5.226 3.361-9.704 1.117-4.477-2.243-18.908-6.97-36.02-22.226-13.313-11.878-22.304-26.54-24.916-31.027-2.613-4.486-.275-6.91 1.959-9.136 2.011-2.011 4.478-5.234 6.721-7.847 2.244-2.613 2.983-4.486 4.478-7.469 1.496-2.991.748-5.603-.369-7.847-1.118-2.243-10.073-24.289-13.812-33.253-3.636-8.732-7.331-7.546-10.073-7.692-2.613-.13-5.595-.155-8.586-.155-2.991 0-7.839 1.118-11.947 5.604-4.108 4.486-15.677 15.324-15.677 37.361s16.047 43.344 18.29 46.335c2.243 2.991 31.585 48.225 76.51 67.632 10.684 4.615 19.029 7.374 25.535 9.437 10.727 3.412 20.49 2.931 28.208 1.779 8.604-1.289 26.498-10.838 30.228-21.298 3.73-10.46 3.73-19.433 2.613-21.298-1.117-1.865-4.108-2.991-8.586-5.234l.008-.017Z" clip-rule="evenodd"/></svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 360 362" className="w-5 h-5"><path fill="#25D366" fillRule="evenodd" d="M307.546 52.566C273.709 18.684 228.706.017 180.756 0 81.951 0 1.538 80.404 1.504 179.235c-.017 31.594 8.242 62.432 23.928 89.609L0 361.736l95.024-24.925c26.179 14.285 55.659 21.805 85.655 21.814h.077c98.788 0 179.21-80.413 179.244-179.244.017-47.898-18.608-92.926-52.454-126.807v-.008Zm-126.79 275.788h-.06c-26.73-.008-52.952-7.194-75.831-20.765l-5.44-3.231-56.391 14.791 15.05-54.981-3.542-5.638c-14.912-23.721-22.793-51.139-22.776-79.286.035-82.14 66.867-148.973 149.051-148.973 39.793.017 77.198 15.53 105.328 43.695 28.131 28.157 43.61 65.596 43.593 105.398-.035 82.149-66.867 148.982-148.982 148.982v.008Zm81.719-111.577c-4.478-2.243-26.497-13.073-30.606-14.568-4.108-1.496-7.09-2.243-10.073 2.243-2.982 4.487-11.568 14.577-14.181 17.559-2.613 2.991-5.226 3.361-9.704 1.117-4.477-2.243-18.908-6.97-36.02-22.226-13.313-11.878-22.304-26.54-24.916-31.027-2.613-4.486-.275-6.91 1.959-9.136 2.011-2.011 4.478-5.234 6.721-7.847 2.244-2.613 2.983-4.486 4.478-7.469 1.496-2.991.748-5.603-.369-7.847-1.118-2.243-10.073-24.289-13.812-33.253-3.636-8.732-7.331-7.546-10.073-7.692-2.613-.13-5.595-.155-8.586-.155-2.991 0-7.839 1.118-11.947 5.604-4.108 4.486-15.677 15.324-15.677 37.361s16.047 43.344 18.29 46.335c2.243 2.991 31.585 48.225 76.51 67.632 10.684 4.615 19.029 7.374 25.535 9.437 10.727 3.412 20.49 2.931 28.208 1.779 8.604-1.289 26.498-10.838 30.228-21.298 3.73-10.46 3.73-19.433 2.613-21.298-1.117-1.865-4.108-2.991-8.586-5.234l.008-.017Z" clipRule="evenodd"/></svg>
                       <span className="font-mono text-[8px] font-black tracking-widest uppercase">WhatsApp</span>
                     </a>
 
@@ -579,7 +710,7 @@ export default function AboutProject() {
                       className="p-3 rounded-2xl bg-[#030409]/85 border border-white/10 hover:border-white/40 hover:bg-white/5 flex flex-col items-center justify-center text-slate-200 transition-all duration-300 text-center gap-1.5 cursor-pointer hover:-translate-y-[2px] shadow-[4px_4px_12px_rgba(0,0,0,0.5)]"
                     >
                       <svg viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5">
-                        <path fill-rule="evenodd" clip-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8C0 11.54 2.29 14.53 5.47 15.59C5.87 15.66 6.02 15.42 6.02 15.21C6.02 15.02 6.01 14.39 6.01 13.72C4 14.09 3.48 13.23 3.32 12.78C3.23 12.55 2.84 11.84 2.5 11.65C2.22 11.5 1.82 11.13 2.49 11.12C3.12 11.11 3.57 11.7 3.72 11.94C4.44 13.15 5.59 12.81 6.05 12.6C6.12 12.08 6.33 11.73 6.56 11.53C4.78 11.33 2.92 10.64 2.92 7.58C2.92 6.71 3.23 5.99 3.74 5.43C3.66 5.23 3.38 4.41 3.82 3.31C3.82 3.31 4.49 3.1 6.02 4.13C6.66 3.95 7.34 3.86 8.02 3.86C8.7 3.86 9.38 3.95 10.02 4.13C11.55 3.09 12.22 3.31 12.22 3.31C12.66 4.41 12.38 5.23 12.3 5.43C12.81 5.99 13.12 6.7 13.12 7.58C13.12 10.65 11.25 11.33 9.47 11.53C9.76 11.78 10.01 12.26 10.01 13.01C10.01 14.08 10 14.94 10 15.21C10 15.42 10.15 15.67 10.55 15.59C13.71 14.53 16 11.53 16 8C16 3.58 12.42 0 8 0Z" transform="scale(64)" fill="#ffffff"/>
+                        <path fillRule="evenodd" clipRule="evenodd" d="M8 0C3.58 0 0 3.58 0 8C0 11.54 2.29 14.53 5.47 15.59C5.87 15.66 6.02 15.42 6.02 15.21C6.02 15.02 6.01 14.39 6.01 13.72C4 14.09 3.48 13.23 3.32 12.78C3.23 12.55 2.84 11.84 2.5 11.65C2.22 11.5 1.82 11.13 2.49 11.12C3.12 11.11 3.57 11.7 3.72 11.94C4.44 13.15 5.59 12.81 6.05 12.6C6.12 12.08 6.33 11.73 6.56 11.53C4.78 11.33 2.92 10.64 2.92 7.58C2.92 6.71 3.23 5.99 3.74 5.43C3.66 5.23 3.38 4.41 3.82 3.31C3.82 3.31 4.49 3.1 6.02 4.13C6.66 3.95 7.34 3.86 8.02 3.86C8.7 3.86 9.38 3.95 10.02 4.13C11.55 3.09 12.22 3.31 12.22 3.31C12.66 4.41 12.38 5.23 12.3 5.43C12.81 5.99 13.12 6.7 13.12 7.58C13.12 10.65 11.25 11.33 9.47 11.53C9.76 11.78 10.01 12.26 10.01 13.01C10.01 14.08 10 14.94 10 15.21C10 15.42 10.15 15.67 10.55 15.59C13.71 14.53 16 11.53 16 8C16 3.58 12.42 0 8 0Z" transform="scale(64)" fill="#ffffff"/>
                       </svg>
                       <span className="font-mono text-[8px] font-black tracking-widest uppercase">GitHub</span>
                     </a>
@@ -591,7 +722,7 @@ export default function AboutProject() {
                       rel="noreferrer"
                       className="p-3 rounded-2xl bg-[#030409]/85 border border-pink-500/20 hover:border-pink-500/50 hover:bg-pink-500/10 flex flex-col items-center justify-center text-pink-400 transition-all duration-300 text-center gap-1.5 cursor-pointer hover:-translate-y-[2px] shadow-[4px_4px_12px_rgba(0,0,0,0.5)]"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 264 264" className="w-5 h-5">
+                      <svg xmlns="http://www.w3.org/2000/svg" xmlnsXlink="http://www.w3.org/1999/xlink" viewBox="0 0 264 264" className="w-5 h-5">
                         <path fill="#fff" d="M132.345 33.973c-26.716 0-30.07.117-40.563.594-10.472.48-17.62 2.136-23.876 4.567-6.47 2.51-11.958 5.87-17.426 11.335-5.472 5.464-8.834 10.948-11.354 17.412-2.44 6.252-4.1 13.397-4.57 23.858-.47 10.486-.593 13.838-.593 40.535 0 26.697.119 30.037.594 40.522.482 10.465 2.14 17.609 4.57 23.859 2.515 6.465 5.876 11.95 11.346 17.414 5.466 5.468 10.955 8.834 17.42 11.345 6.26 2.431 13.41 4.088 23.881 4.567 10.493.477 13.844.594 40.559.594 26.719 0 30.061-.117 40.555-.594 10.472-.48 17.63-2.136 23.888-4.567 6.468-2.51 11.948-5.877 17.414-11.345 5.472-5.464 8.834-10.949 11.354-17.412 2.419-6.252 4.079-13.398 4.57-23.858.472-10.486.595-13.828.595-40.525s-.123-30.047-.594-40.533c-.492-10.465-2.152-17.608-4.57-23.858-2.521-6.466-5.883-11.95-11.355-17.414-5.472-5.468-10.944-8.827-17.42-11.335-6.271-2.431-13.424-4.088-23.897-4.567-10.493-.477-13.834-.594-40.558-.594zm-8.825 17.715c2.62-.004 5.542 0 8.825 0 26.266 0 29.38.094 39.752.565 9.591.438 14.797 2.04 18.264 3.385 4.591 1.782 7.864 3.912 11.305 7.352 3.443 3.44 5.575 6.717 7.362 11.305 1.346 3.46 2.951 8.663 3.388 18.247.47 10.363.573 13.475.573 39.71 0 26.233-.102 29.346-.573 39.709-.44 9.584-2.042 14.786-3.388 18.247-1.783 4.587-3.919 7.854-7.362 11.292-3.443 3.441-6.712 5.57-11.305 7.352-3.463 1.352-8.673 2.95-18.264 3.388-10.37.47-13.486.573-39.752.573-26.268 0-29.38-.102-39.751-.573-9.592-.443-14.797-2.044-18.267-3.39-4.59-1.781-7.87-3.911-11.313-7.352-3.443-3.44-5.574-6.709-7.362-11.298-1.346-3.461-2.95-8.663-3.387-18.247-.472-10.363-.566-13.476-.566-39.726s.094-29.347.566-39.71c.438-9.584 2.04-14.786 3.387-18.25 1.783-4.588 3.919-7.865 7.362-11.305 3.443-3.441 6.722-5.57 11.313-7.357 3.468-1.351 8.675-2.949 18.267-3.389 9.075-.41 12.592-.532 30.926-.553zm61.337 16.322c-6.518 0-11.805 5.277-11.805 11.792 0 6.512 5.287 11.796 11.805 11.796 6.517 0 11.804-5.284 11.804-11.796 0-6.513-5.287-11.796-11.805-11.796zm-52.512 13.782c-27.9 0-50.519 22.603-50.519 50.482 0 27.879 22.62 50.471 50.52 50.471s50.51-22.592 50.51-50.471c0-27.879-22.613-50.482-50.513-50.482zm0 17.715c18.11 0 32.792 14.67 32.792 32.767 0 18.096-14.683 32.767-32.792 32.767-18.11 0-32.791-14.671-32.791-32.767 0-18.098 14.68-32.767 32.791-32.767z"/>
                       </svg>
                       <span className="font-mono text-[8px] font-black tracking-widest uppercase">Instagram</span>

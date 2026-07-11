@@ -132,21 +132,21 @@ export default function LandingPage({ setActiveTab, datasetLoaded }: LandingPage
             </div>
           </motion.div>
 
-          <h1 className="text-5xl sm:text-7xl md:text-8xl font-sans font-black tracking-tight leading-[1.05] text-white uppercase text-center relative z-10">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-sans font-black tracking-tight leading-[1.05] text-white uppercase text-center relative z-10">
             {t("hero.title_part1", "KKN PERSYARIKATAN")} <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-200 to-white bg-clip-text text-transparent font-black block mt-2">
               {t("hero.title_part2", "MUHAMMADIYAH 063")}
             </span>
-            <span className="text-cyan-100/90 text-2xl sm:text-4xl md:text-5xl font-black tracking-wide block mt-4">
+            <span className="text-cyan-100/90 text-xl sm:text-2xl md:text-4xl lg:text-5xl font-black tracking-wide block mt-4">
               {t("hero.title_part3", "UNITED IN SERVICE. DRIVEN BY IMPACT.")}
             </span>
           </h1>
 
-          <p className="text-slate-300 text-[14px] sm:text-[16px] max-w-4xl font-normal mt-6 leading-relaxed text-center">
+          <p className="text-slate-300 text-[13px] sm:text-[15px] md:text-[16px] max-w-4xl px-2 font-normal mt-6 leading-relaxed text-center">
             {t("hero.subtitle", "KKN Project is an integrated digital workspace for KKN Persyarikatan Muhammadiyah Group 063, Universitas Muhammadiyah Yogyakarta. It brings attendance, program planning, financial administration, reporting, documentation, and daily coordination into one connected system, strengthening solidarity, accountability, and meaningful community impact throughout the KKN journey.")}
           </p>
 
-          <div className="flex flex-wrap items-center justify-center gap-5 mt-10">
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-5 mt-8 sm:mt-10 flex-col sm:flex-row">
             <AnimatedGenerateButton
               labelIdle={t("btn.kkn_workspace", "Open KKN Workspace")}
               onClick={() => setActiveTab("dashboard")}
