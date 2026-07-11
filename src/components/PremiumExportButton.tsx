@@ -11,6 +11,7 @@ interface ExportColumn {
 }
 
 interface PremiumExportButtonProps {
+  customHtmlTemplate?: string;
   data: any[];
   columns: ExportColumn[];
   filename: string;
@@ -23,6 +24,7 @@ export function PremiumExportButton({
   columns,
   filename,
   title,
+  customHtmlTemplate,
   id = "premium-export-btn"
 }: PremiumExportButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -113,6 +115,9 @@ export function PremiumExportButton({
 
   const generatePremiumHTML = (isWord = false) => {
     const isFinance = filename === "keuangan_kkn";
+    if (customHtmlTemplate) {
+      return customHtmlTemplate;
+    }
     
     // Day of the week helper
     const getIndonesianDay = (dateStr: string) => {
@@ -728,9 +733,9 @@ export function PremiumExportButton({
 
   const handlePrintPDF = () => {
     audio.playPrimaryClick();
+    const htmlContent = generatePremiumHTML(false);
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
-    const htmlContent = generatePremiumHTML(false);
     printWindow.document.write(htmlContent);
     printWindow.document.close();
     setIsOpen(false);
@@ -739,7 +744,14 @@ export function PremiumExportButton({
   const handleExportWord = () => {
     audio.playPrimaryClick();
     const htmlContent = generatePremiumHTML(true);
-    const blob = new Blob(['\ufeff' + htmlContent], {
+    
+    let finalHtml = htmlContent;
+    if (htmlContent.includes('<html')) {
+        finalHtml = htmlContent.replace('<html', '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"');
+    } else {
+        finalHtml = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">\n<head>\n<meta charset="utf-8">\n<title>Export</title>\n</head>\n<body>\n' + htmlContent + '\n</body>\n</html>';
+    }
+    const blob = new Blob(['\ufeff' + finalHtml], {
       type: 'application/msword'
     });
     const url = URL.createObjectURL(blob);

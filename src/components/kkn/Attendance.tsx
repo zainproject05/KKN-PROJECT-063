@@ -9,6 +9,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
 import { audio } from "../../utils/audioService";
 import { SessionCountdown } from "./SessionCountdown";
+import { PremiumExportButton } from "../PremiumExportButton";
 import { 
   parseSession, 
   serializeSession, 
@@ -696,37 +697,6 @@ export default function Attendance() {
     const existingIndex = records.findIndex(r => r.member_id === memberId);
     const memberName = members.find(m => m.id === memberId)?.full_name || "Anggota KKN";
 
-    // If changing to "Alfa" (Absent/Alfa), we delete the record from database
-    if (newStatus === "Alfa" || internalStatus === "absent") {
-      const existingRecord = records.find(r => r.member_id === memberId);
-      if (existingRecord) {
-        const updatedRecords = records.filter(r => r.member_id !== memberId);
-        setRecords(updatedRecords);
-
-        try {
-          const { error: delErr } = await supabase
-            .from("attendance_records")
-            .delete()
-            .eq("id", existingRecord.id);
-
-          if (delErr) throw delErr;
-
-          await supabase.from("activity_logs").insert([{
-            message: `Menghapus rekam presensi ${memberName} (Status diubah ke Alfa). Sesi: ${session.activity_name}`
-          }]);
-
-          showToast(`Status ${memberName} diperbarui menjadi Alfa.`, "success");
-          audio.playSuccess();
-          fetchSessionRecords(session.id);
-        } catch (err: any) {
-          console.error(err);
-          setRecords(prevRecords); // Rollback
-          showToast(`Gagal memperbarui status ${memberName}: ${err.message || "Kesalahan server"}`, "error");
-        }
-      }
-      return;
-    }
-
     let updatedRecords = [...records];
     const recordData = {
       session_id: session.id,
@@ -803,17 +773,12 @@ export default function Attendance() {
   };
 
   // PDF Official Clean Layout Generator
-  const handlePrintPDFReport = (session: any) => {
-    audio.playPrimaryClick();
 
-
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-
-    const list = members.map((member, i) => {
-      const rec = records.find(r => r.member_id === member.id);
+  const generateAttendanceHTML = (session: any, membersList: any[], recordsList: any[], revStatusMap: Record<string, string>) => {
+    const list = membersList.map((member, i) => {
+      const rec = recordsList.find(r => r.member_id === member.id);
       const rawStatus = rec?.status || "Absent";
-      const indStatus = REV_STATUS_MAP[rawStatus] || "Alfa";
+      const indStatus = revStatusMap[rawStatus] || "Alfa";
       
       return {
         index: i + 1,
@@ -824,98 +789,35 @@ export default function Attendance() {
       };
     });
 
-    const htmlContent = `
+    return `
       <html>
         <head>
           <title>Laporan Kehadiran KKN - ${session.activity_name}</title>
           <style>
-            body {
-              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-              color: #0f172a;
-              padding: 50px;
-              line-height: 1.5;
-            }
-            .header-table {
-              width: 100%;
-              border-bottom: 3px double #020617;
-              padding-bottom: 20px;
-              margin-bottom: 30px;
-            }
-            .logo-text {
-              font-size: 24px;
-              font-weight: 900;
-              color: #020617;
-              letter-spacing: 1px;
-              margin: 0;
-            }
-            .sub-logo {
-              font-size: 11px;
-              font-weight: bold;
-              text-transform: uppercase;
-              color: #475569;
-              letter-spacing: 2px;
-              margin-top: 5px;
-            }
-            .report-title {
-              text-align: center;
-              font-size: 16px;
-              font-weight: bold;
-              text-transform: uppercase;
-              margin-bottom: 25px;
-              letter-spacing: 1px;
-            }
-            .meta-grid {
-              display: grid;
-              grid-template-cols: 1fr 1fr;
-              gap: 20px;
-              margin-bottom: 30px;
-              background-color: #f8fafc;
-              padding: 20px;
-              border-radius: 12px;
-              border: 1px solid #e2e8f0;
-              font-size: 11px;
-            }
-            .meta-item {
-              line-height: 1.8;
-            }
-            .meta-item strong {
-              color: #020617;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-top: 10px;
-              font-size: 11px;
-            }
-            th {
-              background-color: #0f172a;
-              color: #ffffff;
-              text-align: left;
-              padding: 12px;
-              font-weight: bold;
-              text-transform: uppercase;
-              border: 1px solid #0f172a;
-            }
-            td {
-              padding: 12px;
-              border: 1px solid #e2e8f0;
-              color: #334155;
-            }
-            tr:nth-child(even) {
-              background-color: #f8fafc;
-            }
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #0f172a; padding: 50px; line-height: 1.5; background: #ffffff; }
+            .header-table { width: 100%; border-bottom: 3px double #020617; padding-bottom: 20px; margin-bottom: 30px; }
+            .logo-text { font-size: 24px; font-weight: 900; color: #020617; letter-spacing: 1px; margin: 0; }
+            .sub-logo { font-size: 11px; font-weight: bold; text-transform: uppercase; color: #475569; letter-spacing: 2px; margin-top: 5px; }
+            .report-title { text-align: center; font-size: 16px; font-weight: bold; text-transform: uppercase; margin-bottom: 25px; letter-spacing: 1px; }
+            .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; background-color: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; font-size: 11px; }
+            .meta-item { line-height: 1.8; }
+            .meta-item strong { color: #020617; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+            th { background-color: #0f172a; color: #ffffff; text-align: left; padding: 12px; font-weight: bold; text-transform: uppercase; border: 1px solid #0f172a; }
+            td { padding: 12px; border: 1px solid #e2e8f0; color: #334155; }
+            tr:nth-child(even) { background-color: #f8fafc; }
             .badge-hadir { background: #d1fae5; color: #065f46; padding: 4px 10px; border-radius: 100px; font-weight: bold; font-size: 9px; }
             .badge-izin { background: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 100px; font-weight: bold; font-size: 9px; }
             .badge-sakit { background: #f3e8ff; color: #6b21a8; padding: 4px 10px; border-radius: 100px; font-weight: bold; font-size: 9px; }
             .badge-alfa { background: #fee2e2; color: #991b1b; padding: 4px 10px; border-radius: 100px; font-weight: bold; font-size: 9px; }
-            .footer-info {
-              margin-top: 50px;
-              text-align: right;
-              font-size: 10px;
-              color: #94a3b8;
-              border-top: 1px solid #e2e8f0;
-              padding-top: 15px;
-            }
+            .footer-info { margin-top: 50px; text-align: right; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+            .signature-container { display: flex; justify-content: space-between; margin-top: 50px; page-break-inside: avoid; }
+            .sig-box { text-align: center; width: 28%; }
+            .sig-title { font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 60px; }
+            .sig-line { border-bottom: 1.5px solid #0f172a; width: 80%; margin: 0 auto 6px; }
+            .sig-name { font-size: 9.5px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+            .sig-sub { font-size: 8px; color: #64748b; margin: 2px 0 0; font-weight: 600; text-transform: uppercase; }
+            @media print { body { padding: 10px; } }
           </style>
         </head>
         <body>
@@ -923,13 +825,11 @@ export default function Attendance() {
             <tr>
               <td>
                 <div class="logo-text">KKN PERSYARIKATAN MUHAMMADIYAH</div>
-                <div class="sub-logo">Kelompok 063 • Universitas Muhammadiyah Yogyakarta</div>
+                <div class="sub-logo">Kelompok 063 &bull; Universitas Muhammadiyah Yogyakarta</div>
               </td>
             </tr>
           </table>
-
           <div class="report-title">LAPORAN REKAPITULASI PRESENSI KEHADIRAN</div>
-
           <div class="meta-grid">
             <div class="meta-item">
               <strong>Nama Aktivitas:</strong> ${session.activity_name}<br>
@@ -942,50 +842,55 @@ export default function Attendance() {
               <strong>Status Sesi:</strong> ${session.status === "open" ? "AKTIF" : "SELESAI"}
             </div>
           </div>
-
           <table>
             <thead>
               <tr>
                 <th style="width: 5%">No</th>
                 <th style="width: 45%">Nama Lengkap Anggota</th>
                 <th style="width: 20%">NIM</th>
-                <th style="width: 15%; text-align: center;">Status</th>
-                <th style="width: 15%">Waktu Dicatat</th>
+                <th style="width: 15%">Waktu</th>
+                <th style="width: 15%">Status</th>
               </tr>
             </thead>
             <tbody>
-              ${list.map(r => {
-                const badgeClass = r.status === "HADIR" ? "badge-hadir" : r.status === "IZIN" ? "badge-izin" : r.status === "SAKIT" ? "badge-sakit" : "badge-alfa";
-                return `
-                  <tr>
-                    <td>${r.index}</td>
-                    <td><strong>${r.name}</strong></td>
-                    <td>${r.nim}</td>
-                    <td style="text-align: center;"><span class="${badgeClass}">${r.status}</span></td>
-                    <td>${r.timeIn}</td>
-                  </tr>
-                `;
-              }).join("")}
+              ${list.map(item => `
+                <tr>
+                  <td style="text-align: center">${item.index}</td>
+                  <td><strong>${item.name}</strong></td>
+                  <td style="font-family: monospace">${item.nim || "-"}</td>
+                  <td style="text-align: center">${item.timeIn}</td>
+                  <td style="text-align: center">
+                    <span class="badge-${item.status.toLowerCase().replace("belum dicatat", "alfa")} ">${item.status}</span>
+                  </td>
+                </tr>
+              `).join('')}
             </tbody>
           </table>
-
-          <div class="footer-info">
-            <p>Laporan Resmi Rekapitulasi Presensi Kelompok KKN 063 • Dicetak pada ${new Date().toLocaleString("id-ID")}</p>
+          
+          <div class="signature-container">
+            <div class="sig-box">
+              <p class="sig-title">Mengetahui,</p>
+              <div class="sig-line"></div>
+              <p class="sig-name">KETUA KELOMPOK KKN</p>
+              <p class="sig-sub">Kordinator Lapangan 063</p>
+            </div>
+            
+            <div class="sig-box">
+              <p class="sig-title">Disetujui Oleh,</p>
+              <div class="sig-line"></div>
+              <p class="sig-name">DOSEN PEMBIMBING</p>
+              <p class="sig-sub">DPL KKN UMY Yogyakarta</p>
+            </div>
           </div>
-
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            };
-          </script>
+          
+          <div class="footer-info">
+            Dicetak pada: ${new Date().toLocaleString("id-ID")} melalui Sistem KKN Workspace Kelompok 063
+          </div>
         </body>
       </html>
     `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
   };
+
 
   const getInitials = (name: string) => {
     if (!name) return "KKN";
@@ -1270,7 +1175,32 @@ export default function Attendance() {
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <button type="button" onClick={() => handleOpenSessionNow(session)} className="nm-btn px-3 py-1.5 text-[9px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 text-emerald-400 border border-emerald-500/25 cursor-pointer hover:border-emerald-500/40"><Unlock size={11} /> Buka Kembali Sesi</button>
                                   <button type="button" onClick={() => handleDeleteSession(session)} className="nm-btn px-3 py-1.5 text-[9px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 text-red-400 border border-red-500/25 cursor-pointer hover:border-red-500/40"><Trash2 size={11} /> Hapus Sesi</button>
-                                  <button onClick={() => handlePrintPDFReport(session)} className="nm-btn text-rose-400 px-3.5 py-1.5 text-[9.5px] font-sans font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"><Printer size={12} /><span>Export PDF</span></button>
+                                  
+<PremiumExportButton 
+  title={`Laporan Kehadiran KKN - ${session.activity_name}`}
+  filename={`presensi_kkn_${session.id}`}
+  data={members.map((member, i) => {
+    const rec = records.find(r => r.member_id === member.id);
+    const rawStatus = rec?.status || "Absent";
+    const indStatus = REV_STATUS_MAP[rawStatus] || "Alfa";
+    return {
+      index: i + 1,
+      name: member.full_name,
+      nim: member.nim,
+      status: rec ? indStatus.toUpperCase() : "BELUM DICATAT",
+      timeIn: rec?.check_in_at ? new Date(rec.check_in_at).toLocaleTimeString("id-ID") : "-"
+    };
+  })}
+  columns={[
+    { key: "index", label: "NO" },
+    { key: "name", label: "NAMA LENGKAP" },
+    { key: "nim", label: "NIM" },
+    { key: "status", label: "STATUS" },
+    { key: "timeIn", label: "WAKTU PRESENSI" }
+  ]}
+  customHtmlTemplate={generateAttendanceHTML(session, members, records, REV_STATUS_MAP)}
+/>
+  
                                 </div>
                               </div>
                               <div className="grid grid-cols-4 gap-2.5 text-center font-mono">

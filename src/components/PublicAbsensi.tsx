@@ -128,6 +128,7 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
   useEffect(() => {
     closeExpiredSessions();
     fetchMembers();
+    fetchSessions();
     
     // Subscribe to realtime updates on attendance_sessions
     const channel = supabase
