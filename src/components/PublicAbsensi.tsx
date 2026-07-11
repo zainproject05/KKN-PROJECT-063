@@ -306,7 +306,7 @@ export default function PublicAbsensi({ onBackToHome }: { onBackToHome: () => vo
     if (!mapRef.current) return;
     const map = mapRef.current;
     
-    map.setView([lng, lat], 18);
+    map.flyTo({ center: [lng, lat], zoom: 18 });
     
     if (markerRef.current) {
       markerRef.current.setLngLat([lng, lat]);

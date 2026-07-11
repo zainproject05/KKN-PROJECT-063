@@ -1,7 +1,7 @@
 const fs = require('fs');
 let code = fs.readFileSync('src/App.tsx', 'utf8');
 
-const injection = `
+const newInjection = `
   if (!isSupabaseConfigured) {
     return (
       <div className="min-h-screen bg-[#020408] flex items-center justify-center p-4 font-sans text-slate-100">
@@ -15,10 +15,13 @@ const injection = `
           <p className="text-sm text-slate-400 mb-6 leading-relaxed">
             Pastikan <strong>VITE_SUPABASE_URL</strong> dan <strong>VITE_SUPABASE_ANON_KEY</strong> sudah diisi dengan benar.
           </p>
-          <div className="bg-black/50 border border-white/5 rounded-lg p-4 text-left">
+          <div className="bg-black/50 border border-white/5 rounded-lg p-4 text-left space-y-3">
             <p className="text-xs text-slate-500 font-mono">
-              VITE_SUPABASE_URL harus berbentuk:<br/>
+              VITE_SUPABASE_URL harus berbentuk URL:<br/>
               <span className="text-cyan-400">https://xxxxx.supabase.co</span>
+            </p>
+            <p className="text-xs text-slate-500 font-mono">
+              (Jika Anda memasukkan nilai yang dimulai dengan "sb_publishable_" atau "eyJ...", itu mungkin adalah Key, bukan URL.)
             </p>
           </div>
         </div>
@@ -27,5 +30,5 @@ const injection = `
   }
 `;
 
-code = code.replace("if (activeSessionToken) {", injection + "\n  if (activeSessionToken) {");
+code = code.replace(/if \(!isSupabaseConfigured\) \{[\s\S]*?\n  \}[\s\n]*if \(activeSessionToken\) \{/, newInjection + "\n  if (activeSessionToken) {");
 fs.writeFileSync('src/App.tsx', code);
